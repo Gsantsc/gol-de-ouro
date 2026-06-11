@@ -2,7 +2,8 @@ const fs = require("fs");
 const path = require("path");
 
 const isAdminVercelBuild =
-  process.env.VERCEL === "1" && process.env.GOL_DE_OURO_ENTRY === "admin";
+  process.env.GOL_DE_OURO_ENTRY === "admin" &&
+  (process.env.VERCEL === "1" || process.env.GOL_DE_OURO_COPY_ADMIN_OUTPUT === "1");
 
 if (!isAdminVercelBuild) {
   process.exit(0);

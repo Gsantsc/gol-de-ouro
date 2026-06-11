@@ -24,12 +24,12 @@ type ApiFootballFixture = {
     id?: number;
     date?: string;
     status?: { short?: string };
-    venue?: { name?: string | null };
+    venue?: { name?: string | null; city?: string | null };
   };
-  league?: { round?: string };
+  league?: { name?: string; round?: string };
   teams?: {
-    home?: { id?: number; name?: string; logo?: string | null };
-    away?: { id?: number; name?: string; logo?: string | null };
+    home?: { id?: number; name?: string; code?: string | null; logo?: string | null };
+    away?: { id?: number; name?: string; code?: string | null; logo?: string | null };
   };
   goals?: { home?: number | null; away?: number | null };
 };
@@ -101,7 +101,7 @@ const defaultStats = (): ProviderMatchStats => ({
 });
 
 const statusFromApi = (status?: string): MatchStatus => {
-  if (!status || ["NS", "TBD"].includes(status)) return "aberto";
+  if (!status || ["NS", "TBD"].includes(status)) return "fechado";
   if (["FT", "AET", "PEN"].includes(status)) return "encerrado";
   if (["1H", "HT", "2H", "ET", "BT", "P", "LIVE"].includes(status)) return "ao_vivo";
   return "fechado";
@@ -194,15 +194,14 @@ const requestApiFootball = async <T>(
   // API FOOTBALL FIX - Log API request
   debugLog(`[API FOOTBALL FIX] API REQUEST: ${path} with params:`, params);
 
-  // API HEADERS VALIDATED
-  debugLog(`API HEADERS VALIDATED: x-apisports-key and x-apisports-host`);
+  // API FOOTBALL PROVIDER: never expose API_FOOTBALL_KEY to frontend clients.
+  debugLog("API HEADERS VALIDATED: x-apisports-key");
 
   let response: Response;
   try {
     response = await fetch(url.toString(), {
       headers: {
         "x-apisports-key": apiKey,
-        "x-apisports-host": "v3.football.api-sports.io",
       },
       signal: AbortSignal.timeout(30000), // 30 second timeout
     });
@@ -245,6 +244,15 @@ const requestApiFootball = async <T>(
     errors?: unknown;
     paging?: ApiFootballPaging;
   };
+  const errors = json.errors;
+  if (
+    errors &&
+    ((Array.isArray(errors) && errors.length > 0) ||
+      (typeof errors === "object" && Object.keys(errors as Record<string, unknown>).length > 0) ||
+      (typeof errors === "string" && errors.trim() !== ""))
+  ) {
+    throw new Error(`API-Football returned errors: ${JSON.stringify(errors)}`);
+  }
   const responseData = json.response ?? ([] as T);
   const resultCount = json.results ?? 0;
 
@@ -381,7 +389,7 @@ export const createApiFootballProvider = ({
           awayTeam: fixture.teams.away.name,
           championship,
           events,
-          externalId: `api-football-${fixtureId}`,
+          externalId: String(fixtureId),
           homeLogoUrl: fixture.teams.home.logo ?? null,
           homeScore: fixture.goals?.home ?? 0,
           homeTeam: fixture.teams.home.name,

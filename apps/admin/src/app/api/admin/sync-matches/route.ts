@@ -414,6 +414,12 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary> => {
     apiFootballKey: process.env.API_FOOTBALL_KEY,
     wc2026ApiKey: process.env.WC2026_API_KEY,
     baseUrl: process.env.API_FOOTBALL_BASE_URL,
+    fallbackProviderName:
+      process.env.MATCHES_FALLBACK_PROVIDER === "wc2026"
+        ? "wc2026"
+        : process.env.MATCHES_FALLBACK_PROVIDER === "static-wc2026"
+          ? "static-wc2026"
+          : "local-fixtures",
     includeDetails: process.env.API_FOOTBALL_INCLUDE_DETAILS !== "false",
     providerName: process.env.MATCHES_PROVIDER === "wc2026" ? "wc2026" : process.env.MATCHES_PROVIDER === "api-football" ? "api-football" : "local-fixtures",
     season: process.env.API_FOOTBALL_SEASON ? Number(process.env.API_FOOTBALL_SEASON) : 2025,

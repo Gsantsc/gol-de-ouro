@@ -6,13 +6,13 @@ Use este fluxo para criar um projeto Vercel novo e limpo para o painel admin.
 
 - Repository: `Gsantsc/gol-de-ouro`
 - Project name: `gol-de-ouro-admin`
-- Root Directory: `./`
+- Root Directory: `apps/admin`
 
-O arquivo `vercel.json` ja define:
+O arquivo `apps/admin/vercel.json` ja define:
 
 - Framework: `nextjs`
-- Install Command: `npm install`
-- Build Command: `npm run vercel:admin`
+- Install Command: `npm install --prefix ../..`
+- Build Command: `npm run build -w @gol-de-ouro/admin --prefix ../..`
 
 ## Variaveis de ambiente
 
@@ -39,4 +39,3 @@ Depois do deploy ficar Ready, abra:
 ```txt
 https://seu-projeto.vercel.app/admin
 ```
-

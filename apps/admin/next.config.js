@@ -23,13 +23,17 @@ const loadEnvFile = (envPath) => {
 
 loadEnvFile(path.join(rootDir, ".env"));
 
+const isVercel = process.env.VERCEL === "1";
+
+const localDistDir =
+  process.env.GOL_DE_OURO_ENTRY === "dashboard"
+    ? ".next-dashboard"
+    : process.env.GOL_DE_OURO_ENTRY === "admin"
+      ? ".next-admin"
+      : ".next-build";
+
 const nextConfig = {
-  distDir:
-    process.env.GOL_DE_OURO_ENTRY === "dashboard"
-      ? ".next-dashboard"
-      : process.env.GOL_DE_OURO_ENTRY === "admin"
-        ? ".next-admin"
-        : ".next-build",
+  distDir: isVercel ? ".next" : localDistDir,
   transpilePackages: ["@gol-de-ouro/shared"],
   experimental: {
     optimizePackageImports: ["lucide-react"]

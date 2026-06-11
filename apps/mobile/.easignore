@@ -1,0 +1,9 @@
+node_modules
+.expo
+dist
+dist-*
+*.log
+.env
+.env.local
+coverage
+web-build

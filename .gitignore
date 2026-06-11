@@ -1,0 +1,14 @@
+node_modules
+.expo
+.eas-tmp
+.next
+.next-*
+dist
+dist-*
+build
+.env
+.env.local
+.DS_Store
+*.log
+docs/
+.vscode/

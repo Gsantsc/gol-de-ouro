@@ -1,0 +1,40 @@
+{
+  "name": "@gol-de-ouro/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "android": "expo start --android",
+    "build:android:apk": "node ../../scripts/check-beta-env.cjs && node ../../scripts/run-eas.cjs build --platform android --profile beta-apk --non-interactive --no-wait",
+    "build:android:apk:local": "node ../../scripts/check-beta-env.cjs && node ../../scripts/run-eas.cjs build --platform android --profile beta-apk-local --local",
+    "build:android:aab": "node ../../scripts/check-beta-env.cjs && node ../../scripts/run-eas.cjs build --platform android --profile beta-store --non-interactive --no-wait",
+    "check:beta-env": "node ../../scripts/check-beta-env.cjs",
+    "eas:version": "node ../../scripts/run-eas.cjs --version",
+    "export:web": "expo export -p web --output-dir dist-pwa && node ../../scripts/patch-pwa-html.cjs dist-pwa/index.html",
+    "ios": "expo start --ios",
+    "submit:android:beta": "node ../../scripts/run-eas.cjs submit --platform android --profile beta-store",
+    "start": "expo start",
+    "typecheck": "tsc --noEmit",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~55.0.11",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "^2.49.4",
+    "buffer": "^6.0.3",
+    "expo": "~55.0.0",
+    "expo-constants": "~55.0.16",
+    "expo-linear-gradient": "~55.0.14",
+    "lucide-react-native": "^1.16.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.6",
+    "react-native-svg": "15.15.3",
+    "react-native-url-polyfill": "^2.0.0",
+    "react-native-web": "^0.21.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.10",
+    "typescript": "^5.8.3"
+  }
+}

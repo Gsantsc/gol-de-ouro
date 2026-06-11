@@ -1,0 +1,59 @@
+{
+  "name": "gol-de-ouro",
+  "version": "0.1.0",
+  "private": true,
+  "main": "apps/mobile/index.ts",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "overrides": {
+    "postcss": "^8.5.15",
+    "shell-quote": "^1.8.4",
+    "uuid": "^11.1.1",
+    "@next/eslint-plugin-next": {
+      "glob": "10.5.0"
+    }
+  },
+  "scripts": {
+    "admin": "npm run dev:admin -w @gol-de-ouro/admin",
+    "dashboard": "npm run dev:dashboard -w @gol-de-ouro/admin",
+    "user": "npm run dashboard",
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run admin",
+    "expo": "npm run start -w @gol-de-ouro/mobile",
+    "lint": "npm run lint --workspaces --if-present",
+    "mobile": "npm run start -w @gol-de-ouro/mobile",
+    "mobile:check:beta-env": "npm run check:beta-env -w @gol-de-ouro/mobile",
+    "mobile:build:apk": "npm run build:android:apk -w @gol-de-ouro/mobile",
+    "mobile:build:apk:local": "npm run build:android:apk:local -w @gol-de-ouro/mobile",
+    "mobile:build:aab": "npm run build:android:aab -w @gol-de-ouro/mobile",
+    "mobile:submit:beta": "npm run submit:android:beta -w @gol-de-ouro/mobile",
+    "pwa:export": "npm run export:web -w @gol-de-ouro/mobile",
+    "seed:demo-user-flow": "node scripts/demo-user-flow.cjs seed",
+    "seed:demo-user-flow:dry-run": "node scripts/demo-user-flow.cjs seed --dry-run",
+    "cleanup:demo-user-flow": "node scripts/demo-user-flow.cjs cleanup",
+    "cleanup:demo-user-flow:dry-run": "node scripts/demo-user-flow.cjs cleanup --dry-run",
+    "qa:user-flow": "node scripts/qa-user-flow.cjs",
+    "qa:user-flow:keep": "node scripts/qa-user-flow.cjs --keep",
+    "jobs:matches": "node scripts/jobs-matches.cjs",
+    "jobs:matches:dry-run": "node scripts/jobs-matches.cjs --dry-run",
+    "seed:players:wc2026": "node scripts/seed-players-world-cup-2026.cjs",
+    "seed:players:wc2026:dry-run": "node scripts/seed-players-world-cup-2026.cjs --dry-run",
+    "validate:match-rules": "node scripts/validate-match-rules.cjs",
+    "stop:admin": "node scripts/stop-port.cjs 3000",
+    "stop:dashboard": "node scripts/stop-port.cjs 3002",
+    "stop:mobile": "node scripts/stop-port.cjs 8081",
+    "stop:dev": "node scripts/stop-port.cjs 3000 3002 8081",
+    "supabase:reset": "supabase db reset",
+    "supabase:start": "supabase start",
+    "supabase:status": "supabase status",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.10",
+    "concurrently": "^9.1.2",
+    "supabase": "^2.103.0",
+    "typescript": "~5.9.2"
+  }
+}

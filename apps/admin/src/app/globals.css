@@ -1,0 +1,202 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --color-background: #0b0f19;
+  --color-surface: #121826;
+  --color-card: #182131;
+  --color-raised: #202b3d;
+  --color-border: #263244;
+  --color-gold: #d4af37;
+  --color-gold-highlight: #f6d365;
+  --color-blue: #2563eb;
+  --color-text: #f8fafc;
+  --color-muted: #94a3b8;
+  --focus-ring: 0 0 0 3px rgba(212, 175, 55, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background:
+    linear-gradient(135deg, rgba(246, 211, 101, 0.075), transparent 30%),
+    linear-gradient(225deg, rgba(37, 99, 235, 0.08), transparent 34%),
+    linear-gradient(180deg, var(--color-background), var(--color-surface) 52%, var(--color-background));
+  color: var(--color-text);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  min-height: 100vh;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  background-image:
+    linear-gradient(rgba(248, 250, 252, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(248, 250, 252, 0.03) 1px, transparent 1px);
+  background-size: 56px 56px;
+  content: "";
+  inset: 0;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.75), transparent 68%);
+  pointer-events: none;
+  position: fixed;
+  z-index: -1;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(212, 175, 55, 0.35);
+}
+
+:where(a, button, input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  box-shadow: var(--focus-ring);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+@layer components {
+  .input {
+    @apply min-h-11 rounded-md border border-white/10 bg-pitch-950/60 px-3 py-2 text-sm font-semibold text-white outline-none transition placeholder:text-white/35 focus:border-gold focus:bg-pitch-950/75;
+  }
+
+  .btn-primary {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-gold px-4 py-2 text-sm font-black text-black shadow-glow transition hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0;
+  }
+
+  .btn-secondary {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-gold-hi px-4 py-2 text-sm font-black text-black transition hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0;
+  }
+
+  .btn-ghost {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.035] px-4 py-2 text-sm font-black text-white transition hover:-translate-y-0.5 hover:border-gold/30 hover:bg-white/[0.07] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0;
+  }
+
+  .panel {
+    @apply rounded-lg border border-white/10 bg-pitch-800/90 shadow-panel backdrop-blur;
+  }
+
+  .app-shell {
+    @apply min-h-screen overflow-x-hidden px-4 pb-10 pt-5 text-white md:px-8 md:pt-7;
+  }
+
+  .nav-shell {
+    @apply panel mb-6 grid max-w-full grid-cols-3 gap-2 p-2 md:grid-cols-7;
+  }
+
+  .tab-button {
+    @apply relative inline-flex min-h-12 min-w-0 items-center justify-center gap-1.5 overflow-hidden whitespace-normal rounded-md px-2 py-3 text-center text-xs font-black leading-tight transition sm:gap-2 sm:px-3 sm:text-sm;
+  }
+
+  .tab-button-active {
+    @apply bg-gold text-black shadow-glow;
+  }
+
+  .tab-button-active::after {
+    @apply absolute bottom-1 h-1 w-7 rounded-full bg-black/25;
+    content: "";
+  }
+
+  .tab-button-idle {
+    @apply text-white/65 hover:bg-white/[0.07] hover:text-white;
+  }
+
+  .metric-card {
+    @apply rounded-lg border border-white/10 bg-white/[0.045] p-4 transition hover:border-gold/25 hover:bg-white/[0.065];
+  }
+
+  .panel-muted {
+    @apply rounded-lg border border-white/10 bg-white/[0.035];
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-black text-white/70;
+  }
+
+  .badge-green {
+    @apply border-grass/40 bg-grass/10 text-grass;
+  }
+
+  .badge-gold {
+    @apply border-gold/40 bg-gold/10 text-gold;
+  }
+
+  .segmented-control {
+    @apply flex max-w-full gap-2 overflow-x-auto rounded-lg border border-white/10 bg-pitch-950/35 p-1;
+  }
+
+  .segmented-chip {
+    @apply inline-flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-xs font-black transition;
+  }
+
+  .segmented-chip-active {
+    @apply bg-gold text-black shadow-glow;
+  }
+
+  .segmented-chip-idle {
+    @apply border border-white/10 bg-white/[0.035] text-white/65 hover:border-gold/30 hover:bg-white/[0.07] hover:text-white;
+  }
+
+  .empty-state {
+    @apply flex flex-col items-start gap-3 rounded-lg border border-dashed border-white/15 bg-white/[0.035] p-5 sm:flex-row sm:items-center;
+  }
+
+  .table-shell {
+    @apply overflow-x-auto rounded-lg border border-white/10 bg-black/10;
+  }
+
+  .skeleton-line {
+    @apply animate-pulse rounded-md bg-white/10;
+  }
+
+  .brand-lockup {
+    @apply inline-flex items-center gap-3;
+  }
+
+  .brand-mark {
+    @apply relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-gold/30 bg-gold shadow-glow;
+  }
+
+  .brand-ball {
+    @apply relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-pitch-950;
+  }
+
+  .brand-ball::before {
+    background: #0b0f19;
+    content: "";
+    height: 100%;
+    position: absolute;
+    width: 2px;
+  }
+
+  .brand-ball::after {
+    background: #0b0f19;
+    content: "";
+    height: 2px;
+    position: absolute;
+    width: 100%;
+  }
+
+  .brand-ball-core {
+    @apply h-2.5 w-2.5 rounded-full bg-pitch-950;
+  }
+
+  .brand-wordmark {
+    @apply leading-none;
+  }
+
+  .brand-wordmark span {
+    @apply block text-2xl font-black tracking-normal text-gold-hi;
+  }
+
+  .brand-wordmark strong {
+    @apply block text-2xl font-black leading-none tracking-normal text-gold;
+  }
+}

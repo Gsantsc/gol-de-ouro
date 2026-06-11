@@ -1,0 +1,62 @@
+name: Build Android APK Beta
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/shared/**'
+      - '.github/workflows/mobile-android-beta-apk.yml'
+
+jobs:
+  build-android-apk:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Create mobile .env file
+        run: |
+          mkdir -p apps/mobile
+          cat > apps/mobile/.env << EOF
+          EXPO_PUBLIC_APP_ENV=${{ secrets.EXPO_PUBLIC_APP_ENV }}
+          EXPO_PUBLIC_SUPABASE_URL=${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_ANDROID_PACKAGE=br.com.goldeouro.app
+          EXPO_ANDROID_VERSION_CODE=1
+          EXPO_EAS_PROJECT_ID=a8c8cf09-d06c-4823-a2a6-c0b4c2d75196
+          EOF
+      
+      - name: Validate beta environment
+        run: npm run mobile:check:beta-env
+      
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EAS_TOKEN }}
+      
+      - name: Build Android APK
+        run: eas build --platform android --profile beta-apk --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EAS_TOKEN }}
+      
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-beta
+          path: '*.apk'
+          retention-days: 30

@@ -20,6 +20,7 @@
     "dashboard": "npm run dev:dashboard -w @gol-de-ouro/admin",
     "user": "npm run dashboard",
     "build": "npm run build --workspaces --if-present",
+    "postbuild": "node scripts/vercel-admin-output.cjs",
     "dev": "npm run admin",
     "expo": "npm run start -w @gol-de-ouro/mobile",
     "lint": "npm run lint --workspaces --if-present",

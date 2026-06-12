@@ -26,6 +26,9 @@ const normalizeTeamCode = (teamName) =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
+const isPlaceholderTeam = (teamName) =>
+  /^(TBD|Winner |Loser |Runner-up |Third Place )/i.test(String(teamName).trim());
+
 const readJson = async (response) => {
   const text = await response.text();
   if (!response.ok) throw new Error(`HTTP ${response.status}: ${text}`);
@@ -57,9 +60,9 @@ const roster = {
   Colombia: ["Luis Diaz", "James Rodriguez", "Jhon Arias", "Rafael Santos Borre", "Davinson Sanchez"],
   "Congo DR": ["Cedric Bakambu", "Yoane Wissa", "Chancel Mbemba", "Arthur Masuaku", "Gael Kakuta"],
   Croatia: ["Luka Modric", "Mateo Kovacic", "Andrej Kramaric", "Marcelo Brozovic", "Josko Gvardiol"],
-  "Curaçao": ["Leandro Bacuna", "Juninho Bacuna", "Vurnon Anita", "Brandley Kuwas", "Rangelo Janga"],
+  Curacao: ["Leandro Bacuna", "Juninho Bacuna", "Vurnon Anita", "Brandley Kuwas", "Rangelo Janga"],
   Czechia: ["Patrik Schick", "Tomas Soucek", "Vladimir Coufal", "Adam Hlozek", "Antonin Barak"],
-  "Côte d'Ivoire": ["Sebastien Haller", "Franck Kessie", "Simon Adingra", "Nicolas Pepe", "Evan Ndicka"],
+  "Cote d'Ivoire": ["Sebastien Haller", "Franck Kessie", "Simon Adingra", "Nicolas Pepe", "Evan Ndicka"],
   Ecuador: ["Enner Valencia", "Moises Caicedo", "Piero Hincapie", "Pervis Estupinan", "Kendry Paez"],
   Egypt: ["Mohamed Salah", "Mostafa Mohamed", "Trezeguet", "Omar Marmoush", "Mohamed Elneny"],
   England: ["Harry Kane", "Jude Bellingham", "Bukayo Saka", "Phil Foden", "Declan Rice"],
@@ -115,7 +118,7 @@ const mergeRosters = () => ({
 const main = async () => {
   const matches = await rest("matches?select=home_team,away_team,championship&championship=eq.world_cup_2026&deleted_at=is.null");
   const teams = [...new Set((matches ?? []).flatMap((match) => [match.home_team, match.away_team]).filter(Boolean))]
-    .filter((teamName) => teamName !== "TBD")
+    .filter((teamName) => !isPlaceholderTeam(teamName))
     .sort();
   const seedRoster = mergeRosters();
   const rosterTeams = Object.keys(seedRoster).length;

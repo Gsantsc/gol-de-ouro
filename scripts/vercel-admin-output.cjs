@@ -1,6 +1,14 @@
 const fs = require("fs");
 const path = require("path");
 
+if (
+  process.env.GOL_DE_OURO_COPY_WEB_OUTPUT === "1" ||
+  process.env.GOL_DE_OURO_ENTRY === "dashboard"
+) {
+  require("./vercel-web-output.cjs");
+  process.exit(0);
+}
+
 const isAdminVercelBuild =
   process.env.GOL_DE_OURO_ENTRY === "admin" &&
   (process.env.VERCEL === "1" || process.env.GOL_DE_OURO_COPY_ADMIN_OUTPUT === "1");

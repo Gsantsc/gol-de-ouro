@@ -387,3 +387,21 @@ export const updateAutomaticMatchStatuses = async () => {
   const payload = (await response.json()) as { error?: string };
   if (!response.ok) throw new Error(payload.error ?? "Não foi possível atualizar status das partidas.");
 };
+
+export const syncEspnResults = async () => {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error("Sessão administrativa expirada.");
+
+  const response = await fetch("/api/admin/sync-espn", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    },
+    method: "POST"
+  });
+
+  const payload = (await response.json()) as { error?: string; updatedCount?: number; finished?: number; live?: number };
+  if (!response.ok) throw new Error(payload.error ?? "Não foi possível atualizar resultados pela ESPN.");
+  return payload;
+};

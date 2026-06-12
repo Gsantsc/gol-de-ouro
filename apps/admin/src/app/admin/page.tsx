@@ -59,6 +59,7 @@ import {
   softRemoveUser,
   suspendUser,
   syncAutomaticMatches,
+  syncEspnResults,
   toggleTournament,
   updateAutomaticMatchStatuses,
   updateMatch
@@ -961,7 +962,7 @@ const MatchesPanel = ({
           <div>
             <h2 className="text-2xl font-black">Sincronização de Partidas</h2>
             <p className="mt-1 text-sm text-white/55">
-              Sincronize jogos reais da API-Football com logos, placares e eventos em tempo real.
+              Mantenha jogos no Supabase e atualize resultados pela ESPN sem expor fonte externa ao usuário.
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -984,6 +985,20 @@ const MatchesPanel = ({
             >
               <RefreshCw className="h-4 w-4" />
               Sincronizar Jogos
+            </button>
+            <button
+              className="btn-secondary"
+              disabled={busy}
+              onClick={() =>
+                onAction(async () => {
+                  await syncEspnResults();
+                }, {
+                  successMessage: "Resultados ESPN atualizados."
+                })
+              }
+            >
+              <RefreshCw className="h-4 w-4" />
+              Atualizar Resultados
             </button>
             <button
               className="btn-secondary"

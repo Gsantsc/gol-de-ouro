@@ -9,3 +9,7 @@ export * from "./services/matches-provider";
 export * from "./error-handler";
 export * from "./toast";
 export * from "./performance";
+
+export * from "./services/live-result-sync";
+
+export * from "./services/espn-provider";

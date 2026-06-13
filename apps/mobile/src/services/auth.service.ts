@@ -42,7 +42,7 @@ const ensureProfile = async (name?: string) => {
 
 export const signIn = async (email: string, password: string): Promise<Session> => {
   const normalizedEmail = email.trim().toLowerCase();
-  debugLog("[MOBILE AUTH] LOGIN START", normalizedEmail);
+  debugLog("[MOBILE AUTH] LOGIN_ATTEMPT", normalizedEmail);
   signInWithPasswordCalls += 1;
   debugLog("[MOBILE AUTH] signInWithPassword call", signInWithPasswordCalls, normalizedEmail);
 
@@ -52,18 +52,19 @@ export const signIn = async (email: string, password: string): Promise<Session> 
   });
 
   if (error) {
-    debugLog("[MOBILE AUTH] LOGIN ERROR", error.message);
+    debugLog("[MOBILE AUTH] LOGIN_FAILED", normalizedEmail, error.message);
     throw error;
   }
 
   if (!data.session) {
-    debugLog("[MOBILE AUTH] LOGIN NO SESSION", data);
+    debugLog("[MOBILE AUTH] LOGIN_FAILED", normalizedEmail, "missing-session");
     throw new Error("Não foi possível autenticar.");
   }
 
-  debugLog("[MOBILE AUTH] LOGIN SUCCESS", data.session.user.id);
+  debugLog("[MOBILE AUTH] LOGIN_SUCCESS", data.session.user.id);
   debugLog("[MOBILE AUTH] SESSION FOUND", data.session.user.email);
-  await ensureProfile();
+  const profile = await ensureProfile();
+  debugLog("[MOBILE AUTH] PROFILE_LOADED", profile?.id, profile?.status ?? profile?.approval_status);
   await recordLogin();
   return data.session;
 };
@@ -107,6 +108,7 @@ export const getProfile = async (userId: string): Promise<Profile | null> => {
   if (data) {
     const profile = normalizeProfile(data as Profile | null);
     debugLog("[MOBILE AUTH] ROLE FOUND", profile?.role, profile?.status);
+    debugLog("[MOBILE AUTH] PROFILE_LOADED", profile?.id, profile?.status ?? profile?.approval_status);
     return profile;
   }
 
@@ -116,5 +118,6 @@ export const getProfile = async (userId: string): Promise<Profile | null> => {
 
   const profile = await ensureProfile(userData.user.user_metadata?.name);
   debugLog("[MOBILE AUTH] ROLE FOUND", profile?.role, profile?.status);
+  debugLog("[MOBILE AUTH] PROFILE_LOADED", profile?.id, profile?.status ?? profile?.approval_status);
   return profile;
 };

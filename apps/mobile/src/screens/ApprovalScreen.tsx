@@ -13,16 +13,16 @@ export const ApprovalScreen = () => {
   const rejected = status === "rejected";
   const suspended = status === "suspended" || profile?.blocked;
   const message = suspended
-    ? "Seu acesso foi suspenso."
+    ? "Sua conta foi suspensa. Entre em contato com o administrador."
     : rejected
       ? profile?.rejection_reason || "Seu cadastro foi rejeitado pelo administrador."
-      : "Seu cadastro esta em analise.";
+      : "Aguardando aprovação do administrador.";
 
   const verifyApproval = async () => {
     try {
       setFeedback(null);
       await refreshProfile();
-      setFeedback("Status verificado. Se a aprovacao ja foi feita, o app sera liberado agora.");
+      setFeedback("Status verificado. Se a aprovação já foi feita, o app será liberado agora.");
     } catch (error) {
       setFeedback(readError(error));
     }
@@ -43,14 +43,14 @@ export const ApprovalScreen = () => {
             ? "Acesso suspenso"
             : rejected
               ? "Cadastro rejeitado"
-              : "Aguardando aprovacao do administrador"}
+              : "Aguardando aprovação do administrador"}
         </Title>
         <Subtitle>{message}</Subtitle>
         <Text style={styles.body}>
-          Depois que o administrador aprovar, toque em "Verificar aprovacao" ou entre novamente.
+          Depois que o administrador aprovar, toque em "Verificar aprovação" ou entre novamente.
         </Text>
         {!rejected && !suspended && (
-          <AppButton title="Verificar aprovacao" onPress={verifyApproval} loading={refreshingProfile} />
+          <AppButton title="Verificar aprovação" onPress={verifyApproval} loading={refreshingProfile} />
         )}
         {feedback && <Text style={styles.feedback}>{feedback}</Text>}
         <AppButton title="Sair" onPress={signOut} variant="ghost" disabled={refreshingProfile} />

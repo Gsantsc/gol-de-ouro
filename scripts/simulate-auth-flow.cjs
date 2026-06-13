@@ -6,11 +6,12 @@ const assert = (condition, message, details = {}) => {
   }
 };
 
-const createAuthHarness = (initialStatus = "pending") => {
+const createAuthHarness = (initialStatus = "pending", options = {}) => {
   let currentStatus = initialStatus;
   let session = null;
   let profile = null;
   let submitting = false;
+  let signInError = options.signInError ?? null;
   const calls = {
     fetchProfile: 0,
     getSession: 0,
@@ -35,6 +36,7 @@ const createAuthHarness = (initialStatus = "pending") => {
     submitting = true;
     try {
       calls.signIn += 1;
+      if (signInError) throw signInError;
       session = { user: { id: "user-1" } };
       await readProfile();
     } finally {
@@ -65,6 +67,9 @@ const createAuthHarness = (initialStatus = "pending") => {
     get accessAllowed() {
       return Boolean(profile && profile.status === "approved" && !profile.blocked);
     },
+    setSignInError: (error) => {
+      signInError = error;
+    },
     setStatus: (status) => {
       currentStatus = status;
     },
@@ -88,6 +93,20 @@ const runCase = async (name, run) => {
   }
 };
 
+const expectReject = async (promise, expectedMessage) => {
+  let rejected = false;
+  try {
+    await promise;
+  } catch (error) {
+    rejected = true;
+    assert(
+      error.message.includes(expectedMessage),
+      `Erro esperado "${expectedMessage}", recebido "${error.message}".`,
+    );
+  }
+  assert(rejected, "A chamada deveria falhar.");
+};
+
 const cases = [
   runCase("usuario pending tenta login", async () => {
     const auth = createAuthHarness("pending");
@@ -109,6 +128,30 @@ const cases = [
     await auth.signIn();
     assert(auth.calls.signIn === 1, "Rejected deveria chamar signIn uma vez.", auth.calls);
     assert(!auth.accessAllowed, "Rejected nao deve acessar.");
+    return auth.calls;
+  }),
+  runCase("usuario suspended tenta login", async () => {
+    const auth = createAuthHarness("suspended");
+    await auth.signIn();
+    assert(auth.calls.signIn === 1, "Suspended deveria chamar signIn uma vez.", auth.calls);
+    assert(auth.calls.fetchProfile === 1, "Suspended deveria buscar profile uma vez.", auth.calls);
+    assert(!auth.accessAllowed, "Suspended nao deve acessar.");
+    return auth.calls;
+  }),
+  runCase("senha incorreta", async () => {
+    const auth = createAuthHarness("approved", { signInError: new Error("Invalid login credentials") });
+    await expectReject(auth.signIn(), "Invalid login credentials");
+    assert(auth.calls.signIn === 1, "Senha incorreta deve chamar signIn uma vez.", auth.calls);
+    assert(auth.calls.fetchProfile === 0, "Senha incorreta nao deve buscar profile.", auth.calls);
+    assert(!auth.accessAllowed, "Senha incorreta nao deve acessar.");
+    return auth.calls;
+  }),
+  runCase("email inexistente", async () => {
+    const auth = createAuthHarness("approved", { signInError: new Error("User not found") });
+    await expectReject(auth.signIn(), "User not found");
+    assert(auth.calls.signIn === 1, "Email inexistente deve chamar signIn uma vez.", auth.calls);
+    assert(auth.calls.fetchProfile === 0, "Email inexistente nao deve buscar profile.", auth.calls);
+    assert(!auth.accessAllowed, "Email inexistente nao deve acessar.");
     return auth.calls;
   }),
   runCase("pending aprovado clica verificar aprovacao", async () => {

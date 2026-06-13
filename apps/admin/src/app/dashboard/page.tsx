@@ -343,8 +343,7 @@ export default function UserDashboardPage() {
   if (!profile) {
     return (
       <Shell>
-        <AuthPanel onError={setError} onSuccess={refresh} />
-        {error && <ErrorBanner message={error} />}
+        <AuthPanel error={error} onError={setError} onSuccess={refresh} />
       </Shell>
     );
   }
@@ -512,9 +511,11 @@ const Shell = ({ children }: { children: React.ReactNode }) => (
 );
 
 const AuthPanel = ({
+  error,
   onError,
   onSuccess
 }: {
+  error: string | null;
   onError: (message: string | null) => void;
   onSuccess: () => Promise<void>;
 }) => {
@@ -552,17 +553,26 @@ const AuthPanel = ({
     }
   };
 
+  const changeMode = (nextMode: "login" | "signup") => {
+    if (loading) return;
+    setMode(nextMode);
+    setNotice(null);
+    onError(null);
+  };
+
   return (
     <form className="mx-auto mt-12 max-w-md panel p-6 shadow-panel" onSubmit={submit}>
       <BrandLogo />
       <h1 className="mt-5 text-3xl font-black">Acesse sua liga</h1>
       <p className="mt-2 text-sm leading-6 text-white/65">Área do usuário para jogos, palpites, ligas e ranking.</p>
 
+      {error && <ErrorBanner className="mt-5" message={error} />}
+
       <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-pitch-950/60 p-1">
         <button
           className={`rounded-md px-3 py-2 text-sm font-black ${mode === "login" ? "bg-gold text-black" : "text-white/65"}`}
           disabled={loading}
-          onClick={() => setMode("login")}
+          onClick={() => changeMode("login")}
           type="button"
         >
           Entrar
@@ -570,7 +580,7 @@ const AuthPanel = ({
         <button
           className={`rounded-md px-3 py-2 text-sm font-black ${mode === "signup" ? "bg-gold text-black" : "text-white/65"}`}
           disabled={loading}
-          onClick={() => setMode("signup")}
+          onClick={() => changeMode("signup")}
           type="button"
         >
           Criar conta
@@ -1832,8 +1842,8 @@ const EmptyBlock = ({ body, title }: { body: string; title: string }) => (
   </div>
 );
 
-const ErrorBanner = ({ message }: { message: string }) => (
-  <div className="mb-6 rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm font-bold text-red-100">
+const ErrorBanner = ({ className = "mb-6", message }: { className?: string; message: string }) => (
+  <div className={`${className} rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm font-bold text-red-100`}>
     {message}
   </div>
 );

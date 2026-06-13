@@ -60,20 +60,30 @@ const normalizeProfile = (profile: Profile | null): Profile | null => {
 };
 
 export const signInUser = async (email: string, password: string) => {
-  countAuthDebug("signIn", normalizeEmail(email));
+  const normalizedEmail = normalizeEmail(email);
+  countAuthDebug("signIn", normalizedEmail);
+  debugLog("[USER AUTH] LOGIN_ATTEMPT", normalizedEmail);
   const { data, error } = await withSupabaseTimeout(
     supabase.auth.signInWithPassword({
-      email: normalizeEmail(email),
+      email: normalizedEmail,
       password
     }),
     "Tempo esgotado ao autenticar."
   );
 
-  if (error) throw error;
-  if (!data.session) throw new Error("Não foi possível autenticar.");
+  if (error) {
+    debugLog("[USER AUTH] LOGIN_FAILED", normalizedEmail, error.message);
+    throw error;
+  }
+  if (!data.session) {
+    debugLog("[USER AUTH] LOGIN_FAILED", normalizedEmail, "missing-session");
+    throw new Error("Não foi possível autenticar.");
+  }
 
-  await ensureCurrentUserProfile();
+  const profile = await ensureCurrentUserProfile();
+  debugLog("[USER AUTH] PROFILE_LOADED", profile?.id, profile?.status ?? profile?.approval_status);
   await recordLogin();
+  debugLog("[USER AUTH] LOGIN_SUCCESS", data.session.user.id);
   return data.session;
 };
 
@@ -150,7 +160,9 @@ export const getCurrentUserProfile = async () => {
   );
 
   if (error) throw error;
-  return normalizeProfile((data as Profile | null) ?? (await ensureCurrentUserProfile()));
+  const profile = normalizeProfile((data as Profile | null) ?? (await ensureCurrentUserProfile()));
+  debugLog("[USER AUTH] PROFILE_LOADED", profile?.id, profile?.status ?? profile?.approval_status);
+  return profile;
 };
 
 export const loadUserDashboardData = async (userId: string): Promise<UserDashboardData> => {

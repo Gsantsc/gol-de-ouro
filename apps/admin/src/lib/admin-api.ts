@@ -230,8 +230,22 @@ export const loadPendingApprovals = async () => {
 };
 
 export const approveUser = async (userId: string) => {
-  const { error } = await supabase.rpc("approve_user", { target_user_id: userId });
+  const { data, error } = await supabase.auth.getSession();
   if (error) throw error;
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error("Sessão administrativa expirada.");
+
+  const response = await fetch("/api/admin/approve-user", {
+    body: JSON.stringify({ userId }),
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  const payload = await response.json().catch(() => ({})) as { error?: string };
+  if (!response.ok) throw new Error(payload.error ?? "Não foi possível aprovar o usuário.");
 };
 
 export const rejectUser = async (userId: string) => {

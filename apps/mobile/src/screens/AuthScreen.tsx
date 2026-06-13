@@ -20,6 +20,12 @@ export const AuthScreen = () => {
   const [feedbackTone, setFeedbackTone] = useState<"success" | "error" | "info">("info");
   const submittingRef = useRef(false);
 
+  const changeMode = (nextMode: Mode) => {
+    if (loading) return;
+    setMode(nextMode);
+    setFeedback(null);
+  };
+
   const submit = async () => {
     if (submittingRef.current) return;
 
@@ -48,7 +54,6 @@ export const AuthScreen = () => {
 
   return (
     <Screen>
-      {feedback ? <ToastBanner message={feedback} tone={feedbackTone} /> : null}
       <View style={styles.hero}>
         <BrandLogo size="md" />
         <Eyebrow>Bolão premium</Eyebrow>
@@ -58,19 +63,21 @@ export const AuthScreen = () => {
         </Subtitle>
       </View>
 
+      {feedback ? <ToastBanner floating={false} message={feedback} tone={feedbackTone} /> : null}
+
       <Card>
         <View style={styles.switcher}>
           <AppButton
             disabled={loading}
             title="Entrar"
-            onPress={() => setMode("login")}
+            onPress={() => changeMode("login")}
             variant={mode === "login" ? "primary" : "ghost"}
             icon={<LogIn color={mode === "login" ? colors.black : colors.text} size={18} />}
           />
           <AppButton
             disabled={loading}
             title="Cadastrar"
-            onPress={() => setMode("signup")}
+            onPress={() => changeMode("signup")}
             variant={mode === "signup" ? "primary" : "ghost"}
             icon={<UserPlus color={mode === "signup" ? colors.black : colors.text} size={18} />}
           />
@@ -101,7 +108,6 @@ export const AuthScreen = () => {
             onPress={submit}
             title={mode === "login" ? "Acessar" : "Criar conta"}
           />
-          {feedback && <Text style={styles.feedback}>{feedback}</Text>}
         </View>
 
         {mode === "signup" && (
@@ -126,12 +132,6 @@ const styles = StyleSheet.create({
   form: {
     gap: spacing.md,
     marginTop: spacing.md
-  },
-  feedback: {
-    color: colors.gold,
-    fontSize: 13,
-    fontWeight: "800",
-    lineHeight: 19
   },
   note: {
     color: colors.muted,

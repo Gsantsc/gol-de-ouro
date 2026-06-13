@@ -19,18 +19,21 @@ export const readError = (error: unknown): string => {
 export const readAuthError = (error: unknown): string => {
   const message = readError(error).toLowerCase();
 
-  // Invalid credentials
-  if (message.includes("invalid login credentials") || message.includes("email not confirmed")) {
-    return "Email ou senha inválidos.";
+  if (message.includes("email not confirmed")) {
+    return "Seu email ainda não foi confirmado.";
+  }
+
+  if (message.includes("invalid login credentials") || message.includes("user not found")) {
+    return "Email ou senha incorretos.";
   }
 
   // Account status errors
   if (message.includes("suspended") || message.includes("blocked")) {
-    return "Seu acesso foi suspenso. Entre em contato com o administrador.";
+    return "Sua conta foi suspensa. Entre em contato com o administrador.";
   }
 
   if (message.includes("pending") || message.includes("approval")) {
-    return "Seu cadastro está em análise. Aguarde a aprovação do administrador.";
+    return "Seu cadastro ainda está aguardando aprovação.";
   }
 
   if (message.includes("rejected")) {
@@ -66,7 +69,7 @@ export const readAuthError = (error: unknown): string => {
     || message.includes("muitas tentativas")
     || message.includes("security purposes")
   ) {
-    return "Muitas tentativas de acesso. Aguarde alguns minutos e tente novamente.";
+    return "Muitas tentativas de acesso. Aguarde alguns minutos.";
   }
 
   // Session errors
@@ -74,8 +77,7 @@ export const readAuthError = (error: unknown): string => {
     return "Sessão expirada. Faça login novamente.";
   }
 
-  // Default to the original message if no specific case matches
-  return readError(error);
+  return "Não foi possível autenticar. Tente novamente.";
 };
 
 /**

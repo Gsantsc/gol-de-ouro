@@ -261,9 +261,11 @@ export const ErrorState = ({
 );
 
 export const ToastBanner = ({
+  floating = true,
   message,
   tone = "info"
 }: {
+  floating?: boolean;
   message: string;
   tone?: ToastTone;
 }) => {
@@ -275,7 +277,7 @@ export const ToastBanner = ({
   }[tone];
 
   return (
-    <View pointerEvents="none" style={[styles.toast, config.style]}>
+    <View pointerEvents="none" style={[styles.toast, floating ? styles.toastFloating : styles.toastInline, config.style]}>
       {config.icon}
       <Text style={styles.toastText}>{message}</Text>
     </View>
@@ -554,19 +556,24 @@ export const styles = StyleSheet.create({
   },
   toast: {
     alignItems: "center",
-    alignSelf: "center",
     borderRadius: radius.sm,
     borderWidth: 1,
     flexDirection: "row",
     gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm
+  },
+  toastFloating: {
+    alignSelf: "center",
     left: spacing.md,
     maxWidth: 620,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
     position: "absolute",
     right: spacing.md,
     top: spacing.lg,
     zIndex: 20
+  },
+  toastInline: {
+    alignSelf: "stretch"
   },
   toastSuccess: {
     backgroundColor: colors.greenSoft,

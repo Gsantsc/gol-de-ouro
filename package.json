@@ -37,6 +37,7 @@
     "seed:demo-user-flow:dry-run": "node scripts/demo-user-flow.cjs seed --dry-run",
     "cleanup:demo-user-flow": "node scripts/demo-user-flow.cjs cleanup",
     "cleanup:demo-user-flow:dry-run": "node scripts/demo-user-flow.cjs cleanup --dry-run",
+    "cleanup:app-data": "node scripts/cleanup-app-data.cjs",
     "qa:user-flow": "node scripts/qa-user-flow.cjs",
     "qa:user-flow:keep": "node scripts/qa-user-flow.cjs --keep",
     "jobs:matches": "node scripts/jobs-matches.cjs",

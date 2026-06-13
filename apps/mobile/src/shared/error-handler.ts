@@ -58,8 +58,15 @@ export const readAuthError = (error: unknown): string => {
   }
 
   // Rate limiting
-  if (message.includes("rate limit") || message.includes("too many requests")) {
-    return "Muitas tentativas. Aguarde alguns minutos e tente novamente.";
+  if (
+    message.includes("rate limit")
+    || message.includes("rate_limit")
+    || message.includes("too many requests")
+    || message.includes("too many attempts")
+    || message.includes("muitas tentativas")
+    || message.includes("security purposes")
+  ) {
+    return "Muitas tentativas de acesso. Aguarde alguns minutos e tente novamente.";
   }
 
   // Session errors

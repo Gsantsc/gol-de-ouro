@@ -7,6 +7,7 @@ import { supabase } from "./supabase";
 const debugLog = (...args: unknown[]) => {
   if (__DEV__) console.debug(...args);
 };
+let signInWithPasswordCalls = 0;
 
 const normalizeProfile = (profile: Profile | null): Profile | null => {
   if (!profile) return null;
@@ -42,6 +43,8 @@ const ensureProfile = async (name?: string) => {
 export const signIn = async (email: string, password: string): Promise<Session> => {
   const normalizedEmail = email.trim().toLowerCase();
   debugLog("[MOBILE AUTH] LOGIN START", normalizedEmail);
+  signInWithPasswordCalls += 1;
+  debugLog("[MOBILE AUTH] signInWithPassword call", signInWithPasswordCalls, normalizedEmail);
 
   const { data, error } = await supabase.auth.signInWithPassword({
     email: normalizedEmail,

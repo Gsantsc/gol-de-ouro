@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { LogIn, UserPlus } from "lucide-react-native";
 import { readAuthError } from "../shared";
@@ -18,11 +18,13 @@ export const AuthScreen = () => {
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackTone, setFeedbackTone] = useState<"success" | "error" | "info">("info");
+  const submittingRef = useRef(false);
 
   const submit = async () => {
-    if (loading) return;
+    if (submittingRef.current) return;
 
     try {
+      submittingRef.current = true;
       setLoading(true);
       setFeedback(null);
       if (mode === "login") {
@@ -39,6 +41,7 @@ export const AuthScreen = () => {
       setFeedback(message);
       setFeedbackTone("error");
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
@@ -58,12 +61,14 @@ export const AuthScreen = () => {
       <Card>
         <View style={styles.switcher}>
           <AppButton
+            disabled={loading}
             title="Entrar"
             onPress={() => setMode("login")}
             variant={mode === "login" ? "primary" : "ghost"}
             icon={<LogIn color={mode === "login" ? colors.black : colors.text} size={18} />}
           />
           <AppButton
+            disabled={loading}
             title="Cadastrar"
             onPress={() => setMode("signup")}
             variant={mode === "signup" ? "primary" : "ghost"}
@@ -91,6 +96,7 @@ export const AuthScreen = () => {
           />
 
           <AppButton
+            disabled={!email || !password || (mode === "signup" && !name)}
             loading={loading}
             onPress={submit}
             title={mode === "login" ? "Acessar" : "Criar conta"}

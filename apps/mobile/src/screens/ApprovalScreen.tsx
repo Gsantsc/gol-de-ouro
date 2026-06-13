@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Clock3, ShieldX } from "lucide-react-native";
 import { useAuth } from "../hooks/useAuth";
+import { readError } from "../shared";
 import { colors, spacing } from "../theme/tokens";
 import { AppButton, Card, Screen, Subtitle, Title } from "../components/ui";
 
 export const ApprovalScreen = () => {
-  const { profile, signOut } = useAuth();
+  const { profile, refreshProfile, refreshingProfile, signOut } = useAuth();
+  const [feedback, setFeedback] = useState<string | null>(null);
   const status = profile?.status ?? (profile?.blocked ? "suspended" : profile?.approval_status);
   const rejected = status === "rejected";
   const suspended = status === "suspended" || profile?.blocked;
@@ -13,7 +16,17 @@ export const ApprovalScreen = () => {
     ? "Seu acesso foi suspenso."
     : rejected
       ? profile?.rejection_reason || "Seu cadastro foi rejeitado pelo administrador."
-      : "Seu cadastro está em análise.";
+      : "Seu cadastro esta em analise.";
+
+  const verifyApproval = async () => {
+    try {
+      setFeedback(null);
+      await refreshProfile();
+      setFeedback("Status verificado. Se a aprovacao ja foi feita, o app sera liberado agora.");
+    } catch (error) {
+      setFeedback(readError(error));
+    }
+  };
 
   return (
     <Screen>
@@ -30,13 +43,17 @@ export const ApprovalScreen = () => {
             ? "Acesso suspenso"
             : rejected
               ? "Cadastro rejeitado"
-              : "Aguardando aprovação do administrador"}
+              : "Aguardando aprovacao do administrador"}
         </Title>
         <Subtitle>{message}</Subtitle>
         <Text style={styles.body}>
-          Assim que o status virar approved, o app libera campeonatos, palpites e ranking automaticamente.
+          Depois que o administrador aprovar, toque em "Verificar aprovacao" ou entre novamente.
         </Text>
-        <AppButton title="Sair" onPress={signOut} variant="ghost" />
+        {!rejected && !suspended && (
+          <AppButton title="Verificar aprovacao" onPress={verifyApproval} loading={refreshingProfile} />
+        )}
+        {feedback && <Text style={styles.feedback}>{feedback}</Text>}
+        <AppButton title="Sair" onPress={signOut} variant="ghost" disabled={refreshingProfile} />
       </Card>
     </Screen>
   );
@@ -51,5 +68,12 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: spacing.lg,
     marginTop: spacing.md
+  },
+  feedback: {
+    color: colors.gold,
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 19,
+    marginVertical: spacing.sm
   }
 });

@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
@@ -218,6 +218,7 @@ export default function UserDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     const requestedTab = new URLSearchParams(window.location.search).get("tab") as UserTab | null;
@@ -227,16 +228,27 @@ export default function UserDashboardPage() {
   }, []);
 
   const refresh = useCallback(async () => {
-    const nextProfile = await getCurrentUserProfile();
-    setProfile(nextProfile);
+    if (refreshInFlightRef.current) return refreshInFlightRef.current;
 
-    const status = nextProfile?.status ?? (nextProfile?.blocked ? "suspended" : nextProfile?.approval_status);
-    if (!nextProfile || nextProfile.role === "admin" || status !== "approved" || nextProfile.blocked) {
-      setData(emptyData);
-      return;
+    const task = (async () => {
+      const nextProfile = await getCurrentUserProfile();
+      setProfile(nextProfile);
+
+      const status = nextProfile?.status ?? (nextProfile?.blocked ? "suspended" : nextProfile?.approval_status);
+      if (!nextProfile || nextProfile.role === "admin" || status !== "approved" || nextProfile.blocked) {
+        setData(emptyData);
+        return;
+      }
+
+      setData(await loadUserDashboardData(nextProfile.id));
+    })();
+
+    refreshInFlightRef.current = task;
+    try {
+      await task;
+    } finally {
+      if (refreshInFlightRef.current === task) refreshInFlightRef.current = null;
     }
-
-    setData(await loadUserDashboardData(nextProfile.id));
   }, []);
 
   useEffect(() => {
@@ -245,7 +257,13 @@ export default function UserDashboardPage() {
       .finally(() => setAuthLoading(false));
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user || event === "SIGNED_OUT") {
+      if (event === "SIGNED_OUT") {
+        setProfile(null);
+        setData(emptyData);
+        return;
+      }
+
+      if ((event === "SIGNED_IN" || event === "USER_UPDATED") && session?.user) {
         refresh().catch((nextError) => setError(readError(nextError)));
       }
     });
@@ -291,6 +309,19 @@ export default function UserDashboardPage() {
       setBusy(true);
       setError(null);
       await action();
+      await refresh();
+    } catch (nextError) {
+      setError(readError(nextError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verifyApproval = async () => {
+    if (busy) return;
+    try {
+      setBusy(true);
+      setError(null);
       await refresh();
     } catch (nextError) {
       setError(readError(nextError));
@@ -346,10 +377,22 @@ export default function UserDashboardPage() {
           <p className="mt-3 text-sm leading-6 text-white/65">
             Seu status atual é {accessStatus}. Nada entra automaticamente: o administrador precisa aprovar o acesso.
           </p>
-          <button className="btn-ghost mt-6" onClick={() => signOutUser()}>
-            <LogOut className="h-4 w-4" />
-            Sair
-          </button>
+          <p className="mt-2 text-sm leading-6 text-white/55">
+            Depois da aprovação, clique em verificar ou entre novamente. O app não tenta login automaticamente.
+          </p>
+          {error && <ErrorBanner message={error} />}
+          <div className="mt-6 flex flex-wrap gap-2">
+            {accessStatus === "pending" && !profile.blocked && (
+              <button className="btn-primary" disabled={busy} onClick={verifyApproval}>
+                <RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />
+                Verificar aprovação
+              </button>
+            )}
+            <button className="btn-ghost" disabled={busy} onClick={() => signOutUser()}>
+              <LogOut className="h-4 w-4" />
+              Sair
+            </button>
+          </div>
         </div>
       </Shell>
     );
@@ -481,12 +524,14 @@ const AuthPanel = ({
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (loading) return;
+    if (submittingRef.current) return;
 
     try {
+      submittingRef.current = true;
       setLoading(true);
       setNotice(null);
       onError(null);
@@ -502,6 +547,7 @@ const AuthPanel = ({
     } catch (nextError) {
       onError(readAuthError(nextError));
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
@@ -515,6 +561,7 @@ const AuthPanel = ({
       <div className="mt-6 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-pitch-950/60 p-1">
         <button
           className={`rounded-md px-3 py-2 text-sm font-black ${mode === "login" ? "bg-gold text-black" : "text-white/65"}`}
+          disabled={loading}
           onClick={() => setMode("login")}
           type="button"
         >
@@ -522,6 +569,7 @@ const AuthPanel = ({
         </button>
         <button
           className={`rounded-md px-3 py-2 text-sm font-black ${mode === "signup" ? "bg-gold text-black" : "text-white/65"}`}
+          disabled={loading}
           onClick={() => setMode("signup")}
           type="button"
         >

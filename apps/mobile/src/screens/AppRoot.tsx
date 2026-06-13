@@ -33,6 +33,8 @@ const AppContent = () => {
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [pendingInviteUrl, setPendingInviteUrl] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast>(null);
+  const accessStatus = profile?.status ?? (profile?.blocked ? "suspended" : profile?.approval_status);
+  const approvedUserId = accessStatus === "approved" && !profile?.blocked ? profile?.id : undefined;
   const {
     error: dataError,
     achievements,
@@ -49,7 +51,7 @@ const AppContent = () => {
     refresh,
     tournaments
   } =
-    useFootballData(profile?.id);
+    useFootballData(approvedUserId);
 
   const showToast = (message: string, tone: NonNullable<Toast>["tone"] = "info") => {
     setToast({ message, tone });
@@ -65,8 +67,6 @@ const AppContent = () => {
     const index = ranking.findIndex((item) => item.user_id === profile?.id);
     return index >= 0 ? index + 1 : null;
   }, [profile?.id, ranking]);
-  const accessStatus = profile?.status ?? (profile?.blocked ? "suspended" : profile?.approval_status);
-
   useEffect(() => {
     const rememberInviteUrl = (url: string | null) => {
       if (url && (url.includes("invite") || url.includes("join"))) setPendingInviteUrl(url);

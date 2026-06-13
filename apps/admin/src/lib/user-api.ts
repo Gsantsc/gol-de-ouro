@@ -19,6 +19,16 @@ import { supabase } from "./supabase";
 const debugLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") console.debug(...args);
 };
+const authDebugCounts = {
+  fetchProfile: 0,
+  getSession: 0,
+  signIn: 0
+};
+
+const countAuthDebug = (key: keyof typeof authDebugCounts, ...args: unknown[]) => {
+  authDebugCounts[key] += 1;
+  debugLog(`[USER AUTH] ${key} #${authDebugCounts[key]}`, ...args);
+};
 
 export type UserDashboardData = {
   achievements: Achievement[];
@@ -50,6 +60,7 @@ const normalizeProfile = (profile: Profile | null): Profile | null => {
 };
 
 export const signInUser = async (email: string, password: string) => {
+  countAuthDebug("signIn", normalizeEmail(email));
   const { data, error } = await withSupabaseTimeout(
     supabase.auth.signInWithPassword({
       email: normalizeEmail(email),
@@ -118,6 +129,7 @@ const recordLogin = async () => {
 };
 
 export const getCurrentUserProfile = async () => {
+  countAuthDebug("getSession", "current-profile");
   const { data: sessionData, error: sessionError } = await withSupabaseTimeout(
     supabase.auth.getSession(),
     "Tempo esgotado ao verificar a sessão."
@@ -127,6 +139,7 @@ export const getCurrentUserProfile = async () => {
   const userId = sessionData.session?.user.id;
   if (!userId) return null;
 
+  countAuthDebug("fetchProfile", userId);
   const { data, error } = await withSupabaseTimeout(
     supabase
       .from("users")

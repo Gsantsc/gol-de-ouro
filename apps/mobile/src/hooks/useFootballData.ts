@@ -88,7 +88,13 @@ export const useFootballData = (userId?: string) => {
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!userId) return;
+    if (!userId) {
+      footballDataCache = null;
+      setSnapshot(emptySnapshot);
+      setError(null);
+      setLoading(false);
+      return;
+    }
 
     const cachedSnapshot = footballDataCache?.userId === userId ? footballDataCache.snapshot : null;
     if (cachedSnapshot) {

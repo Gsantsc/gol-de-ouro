@@ -10,6 +10,7 @@ import type {
   Group,
   GroupMember,
   Match,
+  MatchProviderRun,
   Player,
   Profile,
   Ranking,
@@ -138,7 +139,8 @@ export const loadAdminData = async () => {
     competitionGroupsResult,
     usersOverviewResult,
     playersResult,
-    feedbackResult
+    feedbackResult,
+    providerRunsResult
   ] = await withSupabaseTimeout(
     Promise.all([
       supabase.rpc("admin_dashboard_metrics"),
@@ -160,7 +162,12 @@ export const loadAdminData = async () => {
         .from("app_feedback")
         .select("*, user:users(name,email)")
         .order("created_at", { ascending: false })
-        .limit(20)
+        .limit(20),
+      supabase
+        .from("match_provider_runs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(10)
     ]),
     "Tempo esgotado ao carregar dados administrativos."
   );
@@ -178,7 +185,8 @@ export const loadAdminData = async () => {
     competitionGroupsResult,
     usersOverviewResult,
     playersResult,
-    feedbackResult
+    feedbackResult,
+    providerRunsResult
   ];
   const failed = results.find((result) => result.error);
   if (failed?.error) throw failed.error;
@@ -204,7 +212,8 @@ export const loadAdminData = async () => {
     groupMembers: (groupMembersResult.data ?? []) as GroupMember[],
     competitions: (competitionsResult.data ?? []) as Competition[],
     competitionGroups: (competitionGroupsResult.data ?? []) as CompetitionGroup[],
-    feedback: (feedbackResult.data ?? []) as BetaFeedback[]
+    feedback: (feedbackResult.data ?? []) as BetaFeedback[],
+    providerRuns: (providerRunsResult.data ?? []) as MatchProviderRun[]
   };
 };
 
@@ -403,5 +412,48 @@ export const syncEspnResults = async () => {
 
   const payload = (await response.json()) as { error?: string; updatedCount?: number; finished?: number; live?: number };
   if (!response.ok) throw new Error(payload.error ?? "Não foi possível atualizar resultados pela ESPN.");
+  return payload;
+};
+
+export type SyncResultsSummary = {
+  checkedMatches: number;
+  dryRun: boolean;
+  errors: string[];
+  finishedAt: string;
+  finishedMatches: number;
+  knockoutUpdated: number;
+  liveMatches: number;
+  provider: string;
+  rankingUpdated: number;
+  scoredPredictions: number;
+  startedAt: string;
+  standingsUpdated: number;
+  status: "success" | "failed";
+  triggeredBy: string;
+  updatedMatches: number;
+};
+
+export const syncResultsNow = async (options: { dryRun?: boolean; force?: boolean } = {}) => {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error("Sessao administrativa expirada.");
+
+  const response = await fetch("/api/admin/sync-results", {
+    body: JSON.stringify({
+      dryRun: options.dryRun === true,
+      force: options.force ?? true,
+    }),
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  const payload = (await response.json()) as SyncResultsSummary & { error?: string };
+  if (!response.ok) {
+    throw new Error(payload.error ?? payload.errors?.[0] ?? "Nao foi possivel atualizar resultados.");
+  }
   return payload;
 };

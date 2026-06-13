@@ -1,0 +1,19 @@
+name: Sync Live Results
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # GITHUB ACTIONS AUTO RESULTS SYNC
+      - name: Call sync endpoint
+        run: |
+          curl -X POST "${{ secrets.ADMIN_SYNC_RESULTS_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --fail \
+            --show-error

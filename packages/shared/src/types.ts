@@ -172,6 +172,28 @@ export type AdminLog = {
   created_at: string;
 };
 
+export type MatchProviderRun = {
+  id: string;
+  provider_name: string;
+  status: "success" | "failed";
+  message: string | null;
+  inserted_count: number;
+  updated_count: number;
+  created_at: string;
+  triggered_by?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  checked_matches?: number | null;
+  updated_matches?: number | null;
+  live_matches?: number | null;
+  finished_matches?: number | null;
+  scored_predictions?: number | null;
+  ranking_updated?: number | null;
+  standings_updated?: number | null;
+  knockout_updated?: number | null;
+  error_message?: string | null;
+};
+
 export type AdminMetrics = {
   total_users: number;
   pending_users: number;

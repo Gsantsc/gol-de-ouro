@@ -33,6 +33,7 @@ import type {
   Group,
   GroupMember,
   Match,
+  MatchProviderRun,
   MatchStatus,
   Player,
   Profile,
@@ -59,7 +60,8 @@ import {
   softRemoveUser,
   suspendUser,
   syncAutomaticMatches,
-  syncEspnResults,
+  syncResultsNow,
+  type SyncResultsSummary,
   toggleTournament,
   updateAutomaticMatchStatuses,
   updateMatch
@@ -83,6 +85,7 @@ type AdminState = {
   matches: Match[];
   metrics: AdminMetrics;
   players: Player[];
+  providerRuns: MatchProviderRun[];
   rankings: Ranking[];
   tournaments: Tournament[];
   users: Profile[];
@@ -109,6 +112,7 @@ const emptyState: AdminState = {
   matches: [],
   metrics: emptyMetrics,
   players: [],
+  providerRuns: [],
   rankings: [],
   tournaments: [],
   users: [],
@@ -374,6 +378,7 @@ export default function AdminPage() {
           matches={data.matches}
           onAction={runAction}
           players={data.players}
+          providerRuns={data.providerRuns}
           tournaments={data.tournaments}
         />
       )}
@@ -826,6 +831,7 @@ const MatchesPanel = ({
   matches,
   onAction,
   players,
+  providerRuns,
   tournaments
 }: {
   actionKey: string | null;
@@ -833,6 +839,7 @@ const MatchesPanel = ({
   matches: Match[];
   onAction: AdminActionRunner;
   players: Player[];
+  providerRuns: MatchProviderRun[];
   tournaments: Tournament[];
 }) => {
   const [showManualCreate, setShowManualCreate] = useState(false);
@@ -846,10 +853,12 @@ const MatchesPanel = ({
   });
   const [drafts, setDrafts] = useState<Record<string, MatchDraft>>({});
   const [density, setDensity] = useState<MatchDensity>("comfortable");
+  const [lastResultsSyncSummary, setLastResultsSyncSummary] = useState<SyncResultsSummary | null>(null);
   const [matchQuery, setMatchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | MatchStatus>("all");
   const [page, setPage] = useState(1);
   const pageSize = density === "compact" ? 12 : 8;
+  const manualResultsSyncBusy = actionKey === "sync-results";
   const teamOptions = useMemo(() => {
     const names = new Set<string>();
     players.forEach((player) => {
@@ -955,6 +964,19 @@ const MatchesPanel = ({
       successMessage: "Partida criada."
     });
 
+  const syncSummaryItems = lastResultsSyncSummary
+    ? [
+        { label: "Jogos consultados", value: lastResultsSyncSummary.checkedMatches },
+        { label: "Jogos atualizados", value: lastResultsSyncSummary.updatedMatches },
+        { label: "Ao vivo", value: lastResultsSyncSummary.liveMatches },
+        { label: "Encerrados", value: lastResultsSyncSummary.finishedMatches },
+        { label: "Palpites pontuados", value: lastResultsSyncSummary.scoredPredictions },
+        { label: "Ranking atualizado", value: lastResultsSyncSummary.rankingUpdated },
+        { label: "Classificacao", value: lastResultsSyncSummary.standingsUpdated },
+        { label: "Mata-mata", value: lastResultsSyncSummary.knockoutUpdated }
+      ]
+    : [];
+
   return (
     <section className="space-y-6">
       <div className="panel p-5">
@@ -988,17 +1010,19 @@ const MatchesPanel = ({
             </button>
             <button
               className="btn-secondary"
-              disabled={busy}
+              disabled={busy || manualResultsSyncBusy}
               onClick={() =>
                 onAction(async () => {
-                  await syncEspnResults();
+                  const summary = await syncResultsNow({ force: true });
+                  setLastResultsSyncSummary(summary);
                 }, {
-                  successMessage: "Resultados ESPN atualizados."
+                  loadingKey: "sync-results",
+                  successMessage: "Resultados atualizados."
                 })
               }
             >
-              <RefreshCw className="h-4 w-4" />
-              Atualizar Resultados
+              <RefreshCw className={`h-4 w-4 ${manualResultsSyncBusy ? "animate-spin" : ""}`} />
+              Atualizar resultados agora
             </button>
             <button
               className="btn-secondary"
@@ -1014,6 +1038,60 @@ const MatchesPanel = ({
             </button>
           </div>
         </div>
+
+        {lastResultsSyncSummary && (
+          <div className="mt-5 rounded-lg border border-white/10 bg-pitch-900/45 p-4">
+            <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-black uppercase tracking-normal text-gold">Ultima atualizacao de resultados</p>
+                <p className="mt-1 text-xs text-white/55">
+                  Provider {lastResultsSyncSummary.provider} - {new Date(lastResultsSyncSummary.finishedAt).toLocaleString("pt-BR")}
+                </p>
+              </div>
+              <span className={`badge ${lastResultsSyncSummary.status === "success" ? "badge-gold" : "border-red-400/40 bg-red-500/10 text-red-100"}`}>
+                {lastResultsSyncSummary.status === "success" ? "ok" : "erro"}
+              </span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {syncSummaryItems.map((item) => (
+                <div className="rounded-md border border-white/10 bg-white/[0.03] p-3" key={item.label}>
+                  <p className="text-lg font-black text-white">{item.value}</p>
+                  <p className="mt-1 text-xs font-bold text-white/50">{item.label}</p>
+                </div>
+              ))}
+            </div>
+            {lastResultsSyncSummary.errors.length > 0 && (
+              <div className="mt-3 rounded-md border border-red-400/30 bg-red-500/10 p-3 text-xs font-bold leading-5 text-red-100">
+                {lastResultsSyncSummary.errors.join(" | ")}
+              </div>
+            )}
+          </div>
+        )}
+
+        {providerRuns.length > 0 && (
+          <div className="mt-5 rounded-lg border border-white/10 bg-pitch-900/35 p-4">
+            <p className="text-sm font-black uppercase tracking-normal text-white/60">Logs recentes de sincronizacao</p>
+            <div className="mt-3 space-y-2">
+              {providerRuns.slice(0, 4).map((run) => (
+                <div className="flex flex-col gap-1 rounded-md border border-white/10 bg-white/[0.03] p-3 text-sm sm:flex-row sm:items-center sm:justify-between" key={run.id}>
+                  <div className="min-w-0">
+                    <p className="truncate font-black text-white">
+                      {run.provider_name} - {run.message ?? "Sem mensagem"}
+                    </p>
+                    <p className="mt-1 text-xs text-white/45">
+                      {new Date(run.created_at).toLocaleString("pt-BR")} - {run.triggered_by ?? "manual"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs font-black text-white/55">
+                    <span>{run.checked_matches ?? 0} consultados</span>
+                    <span>{run.updated_matches ?? run.updated_count} atualizados</span>
+                    <span>{run.scored_predictions ?? 0} palpites</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {showManualCreate && (
           <div className="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-4 border-t border-white/10 pt-5">

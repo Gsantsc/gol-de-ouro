@@ -81,6 +81,18 @@ const withRetry = async <T,>(operation: () => Promise<T>, attempts = 3): Promise
   throw lastError;
 };
 
+const loadOptional = async <T,>(label: string, operation: () => Promise<T>, fallback: T): Promise<T> => {
+  try {
+    return await operation();
+  } catch (error) {
+    if (__DEV__) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[MOBILE DATA] ${label} unavailable. Using fallback.`, message);
+    }
+    return fallback;
+  }
+};
+
 export const useFootballData = (userId?: string) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -132,9 +144,9 @@ export const useFootballData = (userId?: string) => {
         listGroupMembers(),
         listNotifications(userId),
         listPlayers(),
-        listAppInvites(userId),
-        listAchievements(userId),
-        listCompetitions(),
+        loadOptional("app_invites", () => listAppInvites(userId), []),
+        loadOptional("achievements", () => listAchievements(userId), []),
+        loadOptional("competitions", listCompetitions, { competitionGroups: [], competitions: [] }),
         getAppSettings()
       ]));
 

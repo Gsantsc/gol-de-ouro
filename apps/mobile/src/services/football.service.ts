@@ -27,6 +27,11 @@ type PublicUserProfile = {
 };
 
 let publicProfilesRequest: Promise<Map<string, PublicUserProfile>> | null = null;
+const defaultAppSettings: AppSettings = { prediction_lock_minutes: 60 };
+
+const debugWarn = (...args: unknown[]) => {
+  if (__DEV__) console.warn(...args);
+};
 
 const getAppBaseUrl = () => {
   const origin = typeof globalThis.location !== "undefined" ? globalThis.location.origin : "";
@@ -72,8 +77,12 @@ export const listMatches = async (tournamentId?: string) => {
 
 export const getAppSettings = async () => {
   const { data, error } = await supabase.rpc("get_app_settings");
-  if (error) throw error;
-  return ((data?.[0] ?? { prediction_lock_minutes: 60 }) as AppSettings);
+  if (error) {
+    debugWarn("[MOBILE DATA] get_app_settings unavailable. Using fallback.", error.message);
+    return defaultAppSettings;
+  }
+
+  return ((data?.[0] ?? defaultAppSettings) as AppSettings);
 };
 
 export const listMyPredictions = async (userId: string) => {

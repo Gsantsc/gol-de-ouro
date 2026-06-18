@@ -461,15 +461,19 @@ const LoginCard = ({
     event.preventDefault();
     if (loading) return;
 
+    let authenticated = false;
     try {
       setLoading(true);
       setNotice(null);
       onError(null);
       await signInAdmin(email, password);
+      authenticated = true;
       setNotice("Login efetuado com sucesso.\nRedirecionando...");
       await onSuccess();
     } catch (error) {
-      onError(readAuthError(error));
+      onError(authenticated
+        ? `Login efetuado, mas não foi possível carregar o painel administrativo: ${readError(error)}`
+        : readAuthError(error));
     } finally {
       setLoading(false);
     }

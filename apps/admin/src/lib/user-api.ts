@@ -20,6 +20,29 @@ import { supabase } from "./supabase";
 const debugLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") console.debug(...args);
 };
+
+const defaultAppSettings: AppSettings = { prediction_lock_minutes: 60 };
+
+const logOptionalDataFailure = (label: string, error: unknown) => {
+  if (process.env.NODE_ENV !== "production") {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[USER DATA] ${label} unavailable. Using fallback.`, message);
+  }
+};
+
+const readOptionalResult = <T>(
+  label: string,
+  result: { data: T | null; error: unknown },
+  fallback: T
+) => {
+  if (result.error) {
+    logOptionalDataFailure(label, result.error);
+    return fallback;
+  }
+
+  return result.data ?? fallback;
+};
+
 const authDebugCounts = {
   fetchProfile: 0,
   getSession: 0,
@@ -221,8 +244,7 @@ export const loadUserDashboardData = async (userId: string): Promise<UserDashboa
     supabase.rpc("get_app_settings")
   ]), "Tempo esgotado ao carregar o dashboard.");
 
-  const results = [
-    achievementsResult,
+  const requiredResults = [
     tournamentsResult,
     matchesResult,
     predictionsResult,
@@ -231,12 +253,15 @@ export const loadUserDashboardData = async (userId: string): Promise<UserDashboa
     publicProfilesResult,
     groupsResult,
     groupMembersResult,
-    notificationsResult,
-    appInvitesResult,
-    settingsResult
+    notificationsResult
   ];
-  const failed = results.find((result) => result.error);
+  const failed = requiredResults.find((result) => result.error);
   if (failed?.error) throw failed.error;
+
+  const achievements = readOptionalResult("achievements", achievementsResult, []);
+  const appInvites = readOptionalResult("app_invites", appInvitesResult, []);
+  const settings = readOptionalResult("get_app_settings", settingsResult, [defaultAppSettings]);
+
   const publicProfiles = (publicProfilesResult.data ?? []) as Array<{ id: string; name: string }>;
   const profileById = new Map(publicProfiles.map((profile) => [profile.id, profile]));
   const withPublicUser = <T extends { user_id: string }>(item: T) => {
@@ -248,8 +273,8 @@ export const loadUserDashboardData = async (userId: string): Promise<UserDashboa
   };
 
   return {
-    achievements: (achievementsResult.data ?? []) as Achievement[],
-    appInvites: (appInvitesResult.data ?? []) as AppInvite[],
+    achievements: achievements as Achievement[],
+    appInvites: appInvites as AppInvite[],
     groups: ((groupsResult.data ?? []) as Array<{ group?: Group | null }>)
       .map((membership) => membership.group)
       .filter(Boolean) as Group[],
@@ -259,7 +284,7 @@ export const loadUserDashboardData = async (userId: string): Promise<UserDashboa
     players: (playersResult.data ?? []) as Player[],
     predictions: (predictionsResult.data ?? []) as Prediction[],
     ranking: sortRankings(((rankingResult.data ?? []) as Ranking[]).map(withPublicUser)),
-    settings: ((settingsResult.data?.[0] ?? { prediction_lock_minutes: 60 }) as AppSettings),
+    settings: ((settings[0] ?? defaultAppSettings) as AppSettings),
     tournaments: (tournamentsResult.data ?? []) as Tournament[]
   };
 };

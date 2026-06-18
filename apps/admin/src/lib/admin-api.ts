@@ -25,6 +25,28 @@ const debugLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") console.debug(...args);
 };
 
+const defaultAppSettings: AppSettings = { prediction_lock_minutes: 60 };
+
+const logOptionalDataFailure = (label: string, error: unknown) => {
+  if (process.env.NODE_ENV !== "production") {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[ADMIN DATA] ${label} unavailable. Using fallback.`, message);
+  }
+};
+
+const readOptionalResult = <T>(
+  label: string,
+  result: { data: T | null; error: unknown },
+  fallback: T
+) => {
+  if (result.error) {
+    logOptionalDataFailure(label, result.error);
+    return fallback;
+  }
+
+  return result.data ?? fallback;
+};
+
 const getAppBaseUrl = () => {
   if (typeof window !== "undefined" && window.location.origin) return window.location.origin;
   return process.env.NEXT_PUBLIC_APP_URL ?? "https://goldeouro.app";
@@ -175,25 +197,26 @@ export const loadAdminData = async () => {
     "Tempo esgotado ao carregar dados administrativos."
   );
 
-  const results = [
+  const requiredResults = [
     metricsResult,
     usersResult,
     tournamentsResult,
     matchesResult,
     rankingsResult,
     logsResult,
-    groupsResult,
-    groupMembersResult,
-    competitionsResult,
-    competitionGroupsResult,
     usersOverviewResult,
-    playersResult,
-    feedbackResult,
-    providerRunsResult,
-    settingsResult
+    playersResult
   ];
-  const failed = results.find((result) => result.error);
+  const failed = requiredResults.find((result) => result.error);
   if (failed?.error) throw failed.error;
+
+  const groups = readOptionalResult("groups", groupsResult, []);
+  const groupMembers = readOptionalResult("group_members", groupMembersResult, []);
+  const competitions = readOptionalResult("competitions", competitionsResult, []);
+  const competitionGroups = readOptionalResult("competition_groups", competitionGroupsResult, []);
+  const feedback = readOptionalResult("app_feedback", feedbackResult, []);
+  const providerRuns = readOptionalResult("match_provider_runs", providerRunsResult, []);
+  const settings = readOptionalResult("get_app_settings", settingsResult, [defaultAppSettings]);
 
   return {
     logs: (logsResult.data ?? []) as AdminLog[],
@@ -212,13 +235,13 @@ export const loadAdminData = async () => {
     tournaments: (tournamentsResult.data ?? []) as Tournament[],
     users: (usersResult.data ?? []) as Profile[],
     userOverview: (usersOverviewResult.data ?? []) as AdminUserOverview[],
-    groups: (groupsResult.data ?? []) as Group[],
-    groupMembers: (groupMembersResult.data ?? []) as GroupMember[],
-    competitions: (competitionsResult.data ?? []) as Competition[],
-    competitionGroups: (competitionGroupsResult.data ?? []) as CompetitionGroup[],
-    feedback: (feedbackResult.data ?? []) as BetaFeedback[],
-    providerRuns: (providerRunsResult.data ?? []) as MatchProviderRun[],
-    settings: ((settingsResult.data?.[0] ?? { prediction_lock_minutes: 60 }) as AppSettings)
+    groups: groups as Group[],
+    groupMembers: groupMembers as GroupMember[],
+    competitions: competitions as Competition[],
+    competitionGroups: competitionGroups as CompetitionGroup[],
+    feedback: feedback as BetaFeedback[],
+    providerRuns: providerRuns as MatchProviderRun[],
+    settings: ((settings[0] ?? defaultAppSettings) as AppSettings)
   };
 };
 

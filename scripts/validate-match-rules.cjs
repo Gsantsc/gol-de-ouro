@@ -1,4 +1,6 @@
 const HOUR_MS = 60 * 60 * 1000;
+const MINUTE_MS = 60 * 1000;
+const ASSUMED_MATCH_LIVE_WINDOW_MINUTES = 180;
 
 const calculatePredictionWindow = (startTime, lockMinutes = 60) => {
   const startAt = new Date(startTime);
@@ -11,6 +13,12 @@ const calculatePredictionWindow = (startTime, lockMinutes = 60) => {
 const calculateMatchStatus = (match, now, lockMinutes = 60) => {
   if (match.status === "encerrado") return "encerrado";
 
+  if (match.status === "ao_vivo") {
+    const startAt = new Date(match.start_time);
+    const liveWindowEndsAt = new Date(startAt.getTime() + ASSUMED_MATCH_LIVE_WINDOW_MINUTES * MINUTE_MS);
+    if (now >= startAt && now <= liveWindowEndsAt) return "ao_vivo";
+  }
+
   const windowPayload = calculatePredictionWindow(match.start_time, lockMinutes);
   const openAt = new Date(windowPayload.prediction_open_at);
   const closeAt = new Date(windowPayload.prediction_close_at);
@@ -18,8 +26,7 @@ const calculateMatchStatus = (match, now, lockMinutes = 60) => {
 
   if (now < openAt) return "fechado";
   if (now < closeAt) return "aberto";
-  if (now < startAt) return "fechado";
-  return "ao_vivo";
+  return "fechado";
 };
 
 const outcome = ({ awayScore, homeScore }) => {
@@ -100,8 +107,8 @@ const cases = [
   ["2026-06-10T19:00:00.000Z", "aberto"],
   ["2026-06-11T17:59:00.000Z", "aberto"],
   ["2026-06-11T18:00:00.000Z", "fechado"],
-  ["2026-06-11T19:00:00.000Z", "ao_vivo"],
-  ["2026-06-11T22:00:00.000Z", "ao_vivo"],
+  ["2026-06-11T19:00:00.000Z", "fechado"],
+  ["2026-06-11T22:00:00.000Z", "fechado"],
 ];
 
 const failures = cases.flatMap(([now, expected]) => {
@@ -118,12 +125,29 @@ const lockCases = [
   [120, "2026-06-11T17:00:00.000Z", "fechado"],
   [180, "2026-06-11T15:59:00.000Z", "aberto"],
   [180, "2026-06-11T16:00:00.000Z", "fechado"],
-  [180, "2026-06-11T19:00:00.000Z", "ao_vivo"],
+  [180, "2026-06-11T19:00:00.000Z", "fechado"],
 ];
 
 for (const [lockMinutes, now, expected] of lockCases) {
   const actual = calculateMatchStatus(match, new Date(now), lockMinutes);
   if (actual !== expected) failures.push({ actual, expected, lockMinutes, now });
+}
+
+const liveMatch = { ...match, status: "ao_vivo" };
+const finishedMatch = { ...match, status: "encerrado" };
+const staleLiveMatch = { ...match, status: "ao_vivo" };
+const statusFilterCases = [
+  ["future open appears in Aberto", match, "2026-06-11T17:59:00.000Z", "aberto"],
+  ["future closed does not appear in Aberto", match, "2026-06-11T18:00:00.000Z", "fechado"],
+  ["real live appears in Ao vivo", liveMatch, "2026-06-11T19:30:00.000Z", "ao_vivo"],
+  ["finished does not appear in Ao vivo", finishedMatch, "2026-06-11T19:30:00.000Z", "encerrado"],
+  ["finished appears in Encerrado", finishedMatch, "2026-06-12T19:30:00.000Z", "encerrado"],
+  ["stale live does not stay Ao vivo", staleLiveMatch, "2026-06-12T02:01:00.000Z", "fechado"],
+];
+
+for (const [label, targetMatch, now, expected] of statusFilterCases) {
+  const actual = calculateMatchStatus(targetMatch, new Date(now));
+  if (actual !== expected) failures.push({ actual, expected, label, now });
 }
 
 const official = {

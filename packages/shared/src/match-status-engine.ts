@@ -4,6 +4,7 @@ export const PREDICTION_OPEN_OFFSET_HOURS = 24;
 export const DEFAULT_PREDICTION_LOCK_MINUTES = 60;
 export const PREDICTION_CLOSE_OFFSET_HOURS = DEFAULT_PREDICTION_LOCK_MINUTES / 60;
 export const ALLOWED_PREDICTION_LOCK_MINUTES = [60, 90, 120, 180] as const;
+export const ASSUMED_MATCH_LIVE_WINDOW_MINUTES = 180;
 
 export type MatchStatusInput = {
   prediction_close_at?: string | null;
@@ -24,6 +25,12 @@ const readDate = (value: string | null | undefined, fallback: Date) => {
   if (!value) return fallback;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? fallback : date;
+};
+
+const readOptionalDate = (value: string | null | undefined) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 };
 
 export const normalizePredictionLockMinutes = (value?: number | null) =>
@@ -59,22 +66,44 @@ export const resolvePredictionWindow = (
   };
 };
 
-// MATCH STATUS ENGINE
-export const calculateMatchStatus = (
+export const isMatchFinished = (match: MatchStatusInput) => match.status === "encerrado";
+
+export const isMatchLive = (match: MatchStatusInput, now = new Date()) => {
+  if (isMatchFinished(match) || match.status !== "ao_vivo") return false;
+
+  const startAt = readOptionalDate(match.start_time);
+  if (!startAt) return false;
+
+  const liveWindowEndsAt = new Date(startAt.getTime() + ASSUMED_MATCH_LIVE_WINDOW_MINUTES * MINUTE_MS);
+  return now >= startAt && now <= liveWindowEndsAt;
+};
+
+export const isMatchOpenForPrediction = (
   match: MatchStatusInput,
   now = new Date(),
   predictionLockMinutes?: number | null,
-): MatchStatus => {
-  if (match.status === "encerrado") return "encerrado";
+): boolean => {
+  if (isMatchFinished(match) || isMatchLive(match, now)) return false;
 
   const { closeAt, openAt } = resolvePredictionWindow(match, predictionLockMinutes);
   const startAt = readDate(match.start_time, closeAt);
 
-  if (now < openAt) return "fechado";
-  if (now < closeAt) return "aberto";
-  if (now < startAt) return "fechado";
-  return "ao_vivo";
+  return now >= openAt && now < closeAt && now < startAt;
 };
+
+export const getMatchComputedStatus = (
+  match: MatchStatusInput,
+  now = new Date(),
+  predictionLockMinutes?: number | null,
+): MatchStatus => {
+  if (isMatchFinished(match)) return "encerrado";
+  if (isMatchLive(match, now)) return "ao_vivo";
+  if (isMatchOpenForPrediction(match, now, predictionLockMinutes)) return "aberto";
+  return "fechado";
+};
+
+// MATCH STATUS ENGINE
+export const calculateMatchStatus = getMatchComputedStatus;
 
 export const predictionWindowPayload = (
   startTime: string,

@@ -4,7 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { CalendarDays } from "lucide-react-native";
 import type { Match, MatchStatus, Prediction, Tournament } from "../shared";
-import { MATCH_STATUS_LABELS, TOURNAMENT_LABELS, calculateMatchStatus, groupMatchesByDate } from "../shared";
+import {
+  MATCH_STATUS_LABELS,
+  TOURNAMENT_LABELS,
+  groupMatchesByDate,
+  isMatchFinished,
+  isMatchLive,
+  isMatchOpenForPrediction
+} from "../shared";
 import { MatchCard } from "../components/MatchCard";
 import { Card, EmptyState, SectionTitle } from "../components/ui";
 import { colors, radius, spacing } from "../theme/tokens";
@@ -49,13 +56,16 @@ export const TournamentsScreen = ({
 
     return filtered.length ? filtered : worldCupMatches.length ? worldCupMatches : matches;
   }, [matches, selectedTournamentId, worldCupMatches, worldCupTournament?.id]);
-  const statusFilteredMatches = useMemo(
-    () =>
-      selectedMatches.filter((match) =>
-        statusFilter === "all" ? true : calculateMatchStatus(match, new Date(), predictionLockMinutes) === statusFilter,
-      ),
-    [predictionLockMinutes, selectedMatches, statusFilter],
-  );
+  const statusFilteredMatches = useMemo(() => {
+    const now = new Date();
+    return selectedMatches.filter((match) => {
+      if (statusFilter === "all") return true;
+      if (statusFilter === "aberto") return isMatchOpenForPrediction(match, now, predictionLockMinutes);
+      if (statusFilter === "ao_vivo") return isMatchLive(match, now);
+      if (statusFilter === "encerrado") return isMatchFinished(match);
+      return false;
+    });
+  }, [predictionLockMinutes, selectedMatches, statusFilter]);
   const matchGroups = useMemo(() => groupMatchesByDate(statusFilteredMatches), [statusFilteredMatches]);
 
   const header = (

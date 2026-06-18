@@ -260,6 +260,7 @@ const upsertProviderMatch = async (
   providerName: string,
   providerMatch: ProviderMatch,
   tournamentCache: Map<string, string>,
+  predictionLockMinutes: number,
 ) => {
   // FIX MATCH UPSERT - Log upsert start
   logSync(`UPSERT START: ${providerMatch.championship} - ${providerMatch.homeTeam} vs ${providerMatch.awayTeam}`);
@@ -267,7 +268,7 @@ const upsertProviderMatch = async (
   const tournamentId = await ensureTournament(supabase, providerMatch.championship, tournamentCache);
   // WC2026 MATCH UPSERT
   // PREDICTION WINDOW
-  const windowPayload = predictionWindowPayload(providerMatch.kickoff);
+  const windowPayload = predictionWindowPayload(providerMatch.kickoff, predictionLockMinutes);
   const providerStatus =
     providerMatch.status === "encerrado" && providerMatch.hasFinalScore === false
       ? "ao_vivo"
@@ -277,7 +278,7 @@ const upsertProviderMatch = async (
     prediction_open_at: windowPayload.prediction_open_at,
     start_time: providerMatch.kickoff,
     status: providerStatus
-  });
+  }, new Date(), predictionLockMinutes);
 
   // FIX MATCH UPSERT - Payload includes all required fields: provider_name, provider_external_id, championship, last_synced_at, home_team, away_team, logos, start_time, status
   const payload = {
@@ -371,6 +372,13 @@ const upsertProviderMatch = async (
   return existing ? "updated" : "inserted";
 };
 
+const readPredictionLockMinutes = async (supabase: SupabaseClient) => {
+  const { data, error } = await supabase.rpc("get_app_settings");
+  if (error) return 60;
+  const value = Number(data?.[0]?.prediction_lock_minutes ?? 60);
+  return [60, 90, 120, 180].includes(value) ? value : 60;
+};
+
 // LEAGUE AUDIT - API FOOTBALL LEAGUE MAP
 // API-FOOTBALL INTEGRATION
 // League IDs for API-Football
@@ -453,11 +461,12 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary> => {
   logSync(`SYNC FIXTURES FETCHED: ${providerMatches.length} matches`);
 
   const tournamentCache = new Map<string, string>();
+  const predictionLockMinutes = await readPredictionLockMinutes(supabase);
   let insertedCount = 0;
   let updatedCount = 0;
 
   for (const providerMatch of providerMatches) {
-    const action = await upsertProviderMatch(supabase, provider.name, providerMatch, tournamentCache);
+    const action = await upsertProviderMatch(supabase, provider.name, providerMatch, tournamentCache, predictionLockMinutes);
     if (action === "inserted") {
       insertedCount += 1;
       cacheMisses++;

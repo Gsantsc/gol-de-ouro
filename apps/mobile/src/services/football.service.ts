@@ -11,6 +11,7 @@ import type {
   Group,
   GroupMember,
   Achievement,
+  AppSettings,
   Competition,
   CompetitionGroup,
   Notification,
@@ -67,6 +68,12 @@ export const listMatches = async (tournamentId?: string) => {
   const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as Match[];
+};
+
+export const getAppSettings = async () => {
+  const { data, error } = await supabase.rpc("get_app_settings");
+  if (error) throw error;
+  return ((data?.[0] ?? { prediction_lock_minutes: 60 }) as AppSettings);
 };
 
 export const listMyPredictions = async (userId: string) => {
@@ -143,24 +150,17 @@ export const submitPrediction = async ({
   manOfMatchId: string | null;
   redCard: boolean;
 }) => {
-  const { error } = await supabase
-    .from("predictions")
-    .upsert({
-      user_id: userId,
-      match_id: matchId,
-      predicted_home_score: homeScore,
-      predicted_away_score: awayScore,
-      predicted_winner: winner,
-      predicted_first_scorer: null,
-      predicted_first_scorer_id: firstScorerId,
-      predicted_first_goal_no_goals: firstGoalNoGoals,
-      predicted_both_teams_score: bothTeamsScore,
-      predicted_man_of_match: null,
-      predicted_man_of_match_id: manOfMatchId,
-      predicted_red_card: redCard
-    }, {
-      onConflict: "user_id,match_id"
-    });
+  const { error } = await supabase.rpc("submit_prediction", {
+    away_score_value: awayScore,
+    both_teams_score_value: bothTeamsScore,
+    first_goal_no_goals_value: firstGoalNoGoals,
+    first_scorer_id_value: firstScorerId,
+    home_score_value: homeScore,
+    man_of_match_id_value: manOfMatchId,
+    predicted_winner_value: winner,
+    red_card_value: redCard,
+    target_match_id: matchId
+  });
 
   if (error) throw error;
 };

@@ -4,6 +4,7 @@ import type {
   AdminLog,
   AdminMetrics,
   AdminUserOverview,
+  AppSettings,
   BetaFeedback,
   Competition,
   CompetitionGroup,
@@ -140,7 +141,8 @@ export const loadAdminData = async () => {
     usersOverviewResult,
     playersResult,
     feedbackResult,
-    providerRunsResult
+    providerRunsResult,
+    settingsResult
   ] = await withSupabaseTimeout(
     Promise.all([
       supabase.rpc("admin_dashboard_metrics"),
@@ -167,7 +169,8 @@ export const loadAdminData = async () => {
         .from("match_provider_runs")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(10)
+        .limit(10),
+      supabase.rpc("get_app_settings")
     ]),
     "Tempo esgotado ao carregar dados administrativos."
   );
@@ -186,7 +189,8 @@ export const loadAdminData = async () => {
     usersOverviewResult,
     playersResult,
     feedbackResult,
-    providerRunsResult
+    providerRunsResult,
+    settingsResult
   ];
   const failed = results.find((result) => result.error);
   if (failed?.error) throw failed.error;
@@ -213,7 +217,8 @@ export const loadAdminData = async () => {
     competitions: (competitionsResult.data ?? []) as Competition[],
     competitionGroups: (competitionGroupsResult.data ?? []) as CompetitionGroup[],
     feedback: (feedbackResult.data ?? []) as BetaFeedback[],
-    providerRuns: (providerRunsResult.data ?? []) as MatchProviderRun[]
+    providerRuns: (providerRunsResult.data ?? []) as MatchProviderRun[],
+    settings: ((settingsResult.data?.[0] ?? { prediction_lock_minutes: 60 }) as AppSettings)
   };
 };
 
@@ -470,4 +475,9 @@ export const syncResultsNow = async (options: { dryRun?: boolean; force?: boolea
     throw new Error(payload.error ?? payload.errors?.[0] ?? "Nao foi possivel atualizar resultados.");
   }
   return payload;
+};
+
+export const updatePredictionLockMinutes = async (minutes: AppSettings["prediction_lock_minutes"]) => {
+  const { error } = await supabase.rpc("set_prediction_lock_minutes", { target_minutes: minutes });
+  if (error) throw error;
 };

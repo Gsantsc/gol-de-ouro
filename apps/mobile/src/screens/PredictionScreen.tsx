@@ -31,12 +31,14 @@ export const PredictionScreen = ({
   match,
   prediction,
   players,
+  predictionLockMinutes,
   onClose,
   onSubmitted
 }: {
   match: Match;
   prediction?: Prediction;
   players: Player[];
+  predictionLockMinutes: number;
   onClose: () => void;
   onSubmitted: () => Promise<void> | void;
 }) => {
@@ -57,7 +59,7 @@ export const PredictionScreen = ({
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const predictionAccess = canSubmitPrediction(match, profile);
+  const predictionAccess = canSubmitPrediction(match, profile, new Date(), predictionLockMinutes);
   const canSubmit = predictionAccess.allowed;
   const firstScorerPlayer = players.find((player) => player.id === firstScorerId) ?? null;
   const manOfMatchPlayer = players.find((player) => player.id === manOfMatchId) ?? null;
@@ -145,7 +147,7 @@ export const PredictionScreen = ({
 
             <View style={styles.ruleBox}>
               <Text style={styles.rule}>
-                Palpites abrem 24h antes e podem ser editados até 1h antes da partida.
+                Palpites abrem 24h antes e podem ser editados ate {predictionLockMinutes} minutos antes da partida.
               </Text>
             </View>
 

@@ -32,6 +32,7 @@ export const HomeScreen = ({
   onViewGroups,
   onViewPredictions,
   position,
+  predictionLockMinutes,
   predictions,
   profile,
   ranking,
@@ -50,6 +51,7 @@ export const HomeScreen = ({
   onViewGroups: () => void;
   onViewPredictions: () => void;
   position: number | null;
+  predictionLockMinutes: number;
   predictions: Prediction[];
   profile: Profile;
   ranking: Ranking | null;
@@ -63,9 +65,9 @@ export const HomeScreen = ({
   );
   const visibleMatches = worldCupMatches.length ? worldCupMatches : matches;
   const predictedMatchIds = new Set(predictions.map((prediction) => prediction.match_id));
-  const upcomingMatches = visibleMatches.filter((match) => calculateMatchStatus(match) !== "encerrado");
+  const upcomingMatches = visibleMatches.filter((match) => calculateMatchStatus(match, new Date(), predictionLockMinutes) !== "encerrado");
   const nextMatch =
-    upcomingMatches.find((match) => calculateMatchStatus(match) === "aberto" && !predictedMatchIds.has(match.id))
+    upcomingMatches.find((match) => calculateMatchStatus(match, new Date(), predictionLockMinutes) === "aberto" && !predictedMatchIds.has(match.id))
     ?? (upcomingMatches.length ? upcomingMatches : visibleMatches)[0]
     ?? null;
   const tournamentId = tournaments.find((item) => item.slug === "world_cup_2026")?.id ?? tournaments[0]?.id;
@@ -147,6 +149,7 @@ export const HomeScreen = ({
             match={nextMatch}
             onDetails={() => onDetails(nextMatch)}
             onPredict={() => onPredict(nextMatch)}
+            predictionLockMinutes={predictionLockMinutes}
             prediction={predictions.find((item) => item.match_id === nextMatch.id)}
           />
         ) : (

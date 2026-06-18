@@ -16,6 +16,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Settings,
   ShieldCheck,
   Trophy,
   UserCheck,
@@ -27,6 +28,7 @@ import type {
   AdminLog,
   AdminMetrics,
   AdminUserOverview,
+  AppSettings,
   BetaFeedback,
   Competition,
   CompetitionGroup,
@@ -64,6 +66,7 @@ import {
   type SyncResultsSummary,
   toggleTournament,
   updateAutomaticMatchStatuses,
+  updatePredictionLockMinutes,
   updateMatch
 } from "@/lib/admin-api";
 import { supabase } from "@/lib/supabase";
@@ -77,7 +80,8 @@ type Tab =
   | "tournaments"
   | "groups"
   | "competitions"
-  | "ranking";
+  | "ranking"
+  | "settings";
 
 type AdminState = {
   feedback: BetaFeedback[];
@@ -87,6 +91,7 @@ type AdminState = {
   players: Player[];
   providerRuns: MatchProviderRun[];
   rankings: Ranking[];
+  settings: AppSettings;
   tournaments: Tournament[];
   users: Profile[];
   userOverview: AdminUserOverview[];
@@ -114,6 +119,7 @@ const emptyState: AdminState = {
   players: [],
   providerRuns: [],
   rankings: [],
+  settings: { prediction_lock_minutes: 60 },
   tournaments: [],
   users: [],
   userOverview: [],
@@ -207,10 +213,11 @@ export default function AdminPage() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       debugLog("[ADMIN AUTH] onAuthStateChange", event, session?.user?.email);
-      if (session?.user) {
-        refresh().catch((nextError) => setError(readError(nextError)));
-      } else {
+      if (event === "SIGNED_OUT") {
         setAdmin(null);
+        setData(emptyState);
+      } else if ((event === "SIGNED_IN" || event === "USER_UPDATED") && session?.user) {
+        refresh().catch((nextError) => setError(readError(nextError)));
       }
     });
 
@@ -348,7 +355,7 @@ export default function AdminPage() {
       {error && <ErrorBanner message={error} />}
       {toast && <Toast notice={toast} onClose={() => setToast(null)} />}
 
-      <nav className="nav-shell md:grid-cols-7" role="tablist">
+      <nav className="nav-shell md:grid-cols-8" role="tablist">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -379,6 +386,7 @@ export default function AdminPage() {
           onAction={runAction}
           players={data.players}
           providerRuns={data.providerRuns}
+          settings={data.settings}
           tournaments={data.tournaments}
         />
       )}
@@ -413,6 +421,9 @@ export default function AdminPage() {
       {activeTab === "ranking" && (
         <RankingPanel busy={busy} onAction={runAction} rankings={data.rankings} />
       )}
+      {activeTab === "settings" && (
+        <SettingsPanel busy={busy} onAction={runAction} settings={data.settings} />
+      )}
     </Shell>
   );
 }
@@ -424,7 +435,8 @@ const tabs: Array<{ id: Tab; label: string; icon: typeof Activity }> = [
   { id: "tournaments", label: "Campeonatos", icon: Trophy },
   { id: "groups", label: "Grupos", icon: Users },
   { id: "competitions", label: "Competições", icon: ShieldCheck },
-  { id: "ranking", label: "Ranking", icon: Medal }
+  { id: "ranking", label: "Ranking", icon: Medal },
+  { id: "settings", label: "Config.", icon: Settings }
 ];
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
@@ -832,6 +844,7 @@ const MatchesPanel = ({
   onAction,
   players,
   providerRuns,
+  settings,
   tournaments
 }: {
   actionKey: string | null;
@@ -840,6 +853,7 @@ const MatchesPanel = ({
   onAction: AdminActionRunner;
   players: Player[];
   providerRuns: MatchProviderRun[];
+  settings: AppSettings;
   tournaments: Tournament[];
 }) => {
   const [showManualCreate, setShowManualCreate] = useState(false);
@@ -859,6 +873,7 @@ const MatchesPanel = ({
   const [page, setPage] = useState(1);
   const pageSize = density === "compact" ? 12 : 8;
   const manualResultsSyncBusy = actionKey === "sync-results";
+  const predictionLockMinutes = settings.prediction_lock_minutes;
   const teamOptions = useMemo(() => {
     const names = new Set<string>();
     players.forEach((player) => {
@@ -876,8 +891,8 @@ const MatchesPanel = ({
   const sortedMatches = useMemo(() => {
     return [...matches].sort((a, b) => {
       // Live matches first
-      const statusA = calculateMatchStatus(a);
-      const statusB = calculateMatchStatus(b);
+      const statusA = calculateMatchStatus(a, new Date(), predictionLockMinutes);
+      const statusB = calculateMatchStatus(b, new Date(), predictionLockMinutes);
       if (statusA === "ao_vivo" && statusB !== "ao_vivo") return -1;
       if (statusB === "ao_vivo" && statusA !== "ao_vivo") return 1;
       
@@ -886,17 +901,17 @@ const MatchesPanel = ({
       const dateB = new Date(b.start_time);
       return dateA.getTime() - dateB.getTime();
     });
-  }, [matches]);
+  }, [matches, predictionLockMinutes]);
   const filteredMatches = useMemo(
     () =>
       sortedMatches.filter((match) => {
         const matchesQuery = `${match.home_team} ${match.away_team} ${match.championship ?? ""}`
           .toLowerCase()
           .includes(matchQuery.toLowerCase());
-        const matchesStatus = statusFilter === "all" || calculateMatchStatus(match) === statusFilter;
+        const matchesStatus = statusFilter === "all" || calculateMatchStatus(match, new Date(), predictionLockMinutes) === statusFilter;
         return matchesQuery && matchesStatus;
       }),
-    [matchQuery, sortedMatches, statusFilter],
+    [matchQuery, predictionLockMinutes, sortedMatches, statusFilter],
   );
   const totalPages = Math.max(1, Math.ceil(filteredMatches.length / pageSize));
   const pagedMatches = filteredMatches.slice((page - 1) * pageSize, page * pageSize);
@@ -905,7 +920,7 @@ const MatchesPanel = ({
     () =>
       sortedMatches.reduce(
         (current, match) => {
-          const status = calculateMatchStatus(match);
+          const status = calculateMatchStatus(match, new Date(), predictionLockMinutes);
           return { ...current, [status]: current[status] + 1 };
         },
         {
@@ -915,7 +930,7 @@ const MatchesPanel = ({
           fechado: 0
         } satisfies Record<MatchStatus, number>,
       ),
-    [sortedMatches],
+    [predictionLockMinutes, sortedMatches],
   );
 
   useEffect(() => {
@@ -955,7 +970,7 @@ const MatchesPanel = ({
         home_team: form.home_team,
         home_team_logo_url: form.home_team_logo_url || null,
         start_time: startTime,
-        status: calculateMatchStatus({ start_time: startTime, status: "fechado" }),
+        status: calculateMatchStatus({ start_time: startTime, status: "fechado" }, new Date(), predictionLockMinutes),
         tournament_id: form.tournament_id
       });
       setForm((current) => ({ ...current, away_team: "", home_team: "", start_time: "" }));
@@ -1251,6 +1266,7 @@ const MatchesPanel = ({
                         setDrafts((current) => ({ ...current, [match.id]: nextDraft }))
                       }
                       players={players}
+                      predictionLockMinutes={predictionLockMinutes}
                     />
                   );
                 })}
@@ -1289,7 +1305,8 @@ const AdminMatchCard = memo(function AdminMatchCard({
   match,
   onAction,
   onDraftChange,
-  players
+  players,
+  predictionLockMinutes
 }: {
   actionKey: string | null;
   busy: boolean;
@@ -1299,9 +1316,10 @@ const AdminMatchCard = memo(function AdminMatchCard({
   onAction: AdminActionRunner;
   onDraftChange: (draft: MatchDraft) => void;
   players: Player[];
+  predictionLockMinutes: number;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const calculatedStatus = calculateMatchStatus(match);
+  const calculatedStatus = calculateMatchStatus(match, new Date(), predictionLockMinutes);
   const isLive = calculatedStatus === "ao_vivo";
   const isCompact = density === "compact";
   const isDirty =
@@ -1322,6 +1340,9 @@ const AdminMatchCard = memo(function AdminMatchCard({
       : match.championship || "Copa do Mundo 2026";
   const provider = match.provider_name ?? "Manual";
   const syncLabel = match.last_synced_at ? formatFullDatePtBr(match.last_synced_at) : "-";
+  const predictionCloseAt = new Date(
+    new Date(match.start_time).getTime() - predictionLockMinutes * 60 * 1000,
+  ).toISOString();
 
   return (
     <article className="overflow-hidden rounded-lg border border-pitch-600 bg-pitch-800 shadow-panel transition hover:border-gold/25">
@@ -1378,7 +1399,7 @@ const AdminMatchCard = memo(function AdminMatchCard({
         <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <AdminMatchMeta label="Início" value={formatFullDatePtBr(match.start_time)} />
           <AdminMatchMeta label="Abre palpites" value={formatFullDatePtBr(match.prediction_open_at)} />
-          <AdminMatchMeta label="Fecha palpites" value={formatFullDatePtBr(match.prediction_close_at)} />
+          <AdminMatchMeta label="Fecha palpites" value={formatFullDatePtBr(predictionCloseAt)} />
           <AdminMatchMeta label="Provider" value={provider} />
           <AdminMatchMeta label="Última sync" value={syncLabel} />
         </div>
@@ -1933,6 +1954,82 @@ const CompetitionsPanel = ({
   );
 };
 
+const SettingsPanel = ({
+  busy,
+  onAction,
+  settings
+}: {
+  busy: boolean;
+  onAction: AdminActionRunner;
+  settings: AppSettings;
+}) => {
+  const [predictionLockMinutes, setPredictionLockMinutes] =
+    useState<AppSettings["prediction_lock_minutes"]>(settings.prediction_lock_minutes);
+
+  useEffect(() => {
+    setPredictionLockMinutes(settings.prediction_lock_minutes);
+  }, [settings.prediction_lock_minutes]);
+
+  const options: AppSettings["prediction_lock_minutes"][] = [60, 90, 120, 180];
+
+  return (
+    <section className="space-y-6">
+      <div className="panel p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-normal text-gold">Configurações do Bolão</p>
+            <h2 className="mt-2 text-2xl font-black">Regras de palpites</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/60">
+              Altere quando a criação e edição de palpites serão bloqueadas antes do início da partida. A regra é aplicada no banco, no PWA e no app mobile.
+            </p>
+          </div>
+          <span className="badge badge-gold">Atual: {settings.prediction_lock_minutes} min</span>
+        </div>
+
+        <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_280px]">
+          <div className="grid gap-3 sm:grid-cols-4">
+            {options.map((option) => (
+              <button
+                className={`rounded-lg border p-4 text-left transition ${
+                  predictionLockMinutes === option
+                    ? "border-gold/45 bg-gold/10 text-gold"
+                    : "border-white/10 bg-white/[0.035] text-white/70 hover:border-gold/25"
+                }`}
+                key={option}
+                onClick={() => setPredictionLockMinutes(option)}
+                type="button"
+              >
+                <p className="text-2xl font-black">{option}</p>
+                <p className="mt-1 text-xs font-bold">minutos antes</p>
+              </button>
+            ))}
+          </div>
+
+          <div className="rounded-lg border border-white/10 bg-pitch-950/35 p-4">
+            <p className="text-sm font-black text-white">Regra ativa</p>
+            <p className="mt-2 text-sm leading-6 text-white/60">
+              Quando faltar menos de {predictionLockMinutes} minutos, o usuário só visualiza o palpite. Criar ou editar fica bloqueado.
+            </p>
+            <button
+              className="btn-primary mt-4 w-full"
+              disabled={busy || predictionLockMinutes === settings.prediction_lock_minutes}
+              onClick={() =>
+                onAction(() => updatePredictionLockMinutes(predictionLockMinutes), {
+                  successMessage: "Configuração de palpites atualizada."
+                })
+              }
+              type="button"
+            >
+              <Settings className="h-4 w-4" />
+              Salvar regra
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const RankingPanel = ({
   busy,
   onAction,
@@ -2025,8 +2122,8 @@ const AdminPageSkeleton = () => (
       </div>
     </div>
     <div className="panel p-2">
-      <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-7">
-        {Array.from({ length: 7 }).map((_, index) => (
+      <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-8">
+        {Array.from({ length: 8 }).map((_, index) => (
           <div className="skeleton-line h-12" key={index} />
         ))}
       </div>

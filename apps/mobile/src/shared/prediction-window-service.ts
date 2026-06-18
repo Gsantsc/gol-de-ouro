@@ -1,5 +1,10 @@
 import type { ApprovalStatus } from "./types";
-import { calculateMatchStatus, resolvePredictionWindow, type MatchStatusInput } from "./match-status-engine";
+import {
+  calculateMatchStatus,
+  normalizePredictionLockMinutes,
+  resolvePredictionWindow,
+  type MatchStatusInput
+} from "./match-status-engine";
 
 export type PredictionWindowState = "not_open" | "open" | "closed";
 
@@ -16,22 +21,29 @@ export type PredictionAccessResult = {
 };
 
 export const predictionAccessMessages = {
-  closed: "Este jogo já não aceita novos palpites.",
-  notApproved: "Apenas usuários aprovados podem enviar palpites.",
+  closed: "Palpites encerrados para esta partida.",
+  notApproved: "Apenas usuarios aprovados podem enviar palpites.",
   notOpen: "Palpites abrem 24h antes do jogo.",
   open: "Palpite permitido.",
-  pastClose: "Palpites encerram 1h antes do jogo."
+  pastClose: "Palpites encerrados para esta partida."
 } as const;
 
-export const getPredictionWindowState = (match: MatchStatusInput, now = new Date()): PredictionWindowState => {
-  const calculatedStatus = calculateMatchStatus(match, now);
+export const getPredictionWindowState = (
+  match: MatchStatusInput,
+  now = new Date(),
+  predictionLockMinutes?: number | null,
+): PredictionWindowState => {
+  const calculatedStatus = calculateMatchStatus(match, now, predictionLockMinutes);
   if (calculatedStatus === "encerrado" || calculatedStatus === "ao_vivo") return "closed";
 
-  const { closeAt, openAt } = resolvePredictionWindow(match);
+  const { closeAt, openAt } = resolvePredictionWindow(match, predictionLockMinutes);
   if (now < openAt) return "not_open";
   if (now >= closeAt) return "closed";
   return "open";
 };
+
+export const predictionLockMessage = (predictionLockMinutes?: number | null) =>
+  `Palpites encerram ${normalizePredictionLockMinutes(predictionLockMinutes)} minutos antes do jogo.`;
 
 const isApproved = (profile?: PredictionAccessProfile | null) => {
   if (!profile) return true;
@@ -44,6 +56,7 @@ export const canSubmitPrediction = (
   match: MatchStatusInput,
   profile?: PredictionAccessProfile | null,
   now = new Date(),
+  predictionLockMinutes?: number | null,
 ): PredictionAccessResult => {
   if (!isApproved(profile)) {
     return {
@@ -53,7 +66,7 @@ export const canSubmitPrediction = (
     };
   }
 
-  const state = getPredictionWindowState(match, now);
+  const state = getPredictionWindowState(match, now, predictionLockMinutes);
   if (state === "not_open") {
     return {
       allowed: false,
@@ -65,7 +78,7 @@ export const canSubmitPrediction = (
   if (state === "closed") {
     return {
       allowed: false,
-      message: calculateMatchStatus(match, now) === "ao_vivo"
+      message: calculateMatchStatus(match, now, predictionLockMinutes) === "ao_vivo"
         ? predictionAccessMessages.pastClose
         : predictionAccessMessages.closed,
       state
@@ -73,7 +86,7 @@ export const canSubmitPrediction = (
   }
 
   return {
-    allowed: calculateMatchStatus(match, now) === "aberto",
+    allowed: calculateMatchStatus(match, now, predictionLockMinutes) === "aberto",
     message: predictionAccessMessages.open,
     state
   };

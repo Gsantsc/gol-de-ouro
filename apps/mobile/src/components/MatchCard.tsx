@@ -97,15 +97,17 @@ const MatchCardBase = ({
   match,
   prediction,
   onDetails,
-  onPredict
+  onPredict,
+  predictionLockMinutes
 }: {
   match: Match;
   prediction?: Prediction;
   onDetails: () => void;
   onPredict: () => void;
+  predictionLockMinutes: number;
 }) => {
-  const calculatedStatus = calculateMatchStatus(match);
-  const predictionAccess = canSubmitPrediction(match);
+  const calculatedStatus = calculateMatchStatus(match, new Date(), predictionLockMinutes);
+  const predictionAccess = canSubmitPrediction(match, null, new Date(), predictionLockMinutes);
   const canEditOrPredict = predictionAccess.allowed;
   const city = cityForStadium(match.stadium);
   const statusLabel = MATCH_STATUS_LABELS[calculatedStatus];

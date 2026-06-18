@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   Achievement,
+  AppSettings,
   AppInvite,
   Competition,
   CompetitionGroup,
@@ -24,6 +25,7 @@ import {
   listNotifications,
   listPlayers,
   listRanking,
+  getAppSettings,
   listTournaments
 } from "../services/football.service";
 import { supabase } from "../services/supabase";
@@ -40,6 +42,7 @@ type FootballDataSnapshot = {
   players: Player[];
   predictions: Prediction[];
   ranking: Ranking[];
+  settings: AppSettings;
   tournaments: Tournament[];
 };
 
@@ -55,6 +58,7 @@ const emptySnapshot: FootballDataSnapshot = {
   players: [],
   predictions: [],
   ranking: [],
+  settings: { prediction_lock_minutes: 60 },
   tournaments: []
 };
 
@@ -117,7 +121,8 @@ export const useFootballData = (userId?: string) => {
         nextPlayers,
         nextAppInvites,
         nextAchievements,
-        nextCompetitionsData
+        nextCompetitionsData,
+        nextSettings
       ] = await withRetry(() => Promise.all([
         listTournaments(),
         listMatches(),
@@ -129,7 +134,8 @@ export const useFootballData = (userId?: string) => {
         listPlayers(),
         listAppInvites(userId),
         listAchievements(userId),
-        listCompetitions()
+        listCompetitions(),
+        getAppSettings()
       ]));
 
       applySnapshot({
@@ -144,6 +150,7 @@ export const useFootballData = (userId?: string) => {
         players: nextPlayers,
         predictions: nextPredictions,
         ranking: nextRanking,
+        settings: nextSettings,
         tournaments: nextTournaments
       }, userId);
     } catch (nextError) {
@@ -219,6 +226,7 @@ export const useFootballData = (userId?: string) => {
     predictions: snapshot.predictions,
     ranking: snapshot.ranking,
     refresh,
+    settings: snapshot.settings,
     tournaments: snapshot.tournaments
   };
 };

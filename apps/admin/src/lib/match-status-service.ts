@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Match, MatchStatus } from "@gol-de-ouro/shared";
-import { calculateMatchStatus, predictionWindowPayload } from "@gol-de-ouro/shared";
 
 type MatchRow = Pick<
   Match,
@@ -30,57 +29,42 @@ export type MatchStatusUpdateSummary = {
 // AUTO STATUS UPDATE
 export const updateMatchStatuses = async (
   supabase: SupabaseClient,
-  now = new Date(),
+  _now = new Date(),
 ): Promise<MatchStatusUpdateSummary> => {
-  const { data, error } = await supabase
+  const { data: beforeData, error: beforeError } = await supabase
     .from("matches")
     .select("id,home_team,away_team,start_time,prediction_open_at,prediction_close_at,status,deleted_at")
     .is("deleted_at", null)
     .neq("status", "encerrado");
 
-  if (error) throw error;
+  if (beforeError) throw beforeError;
 
-  const matches = (data ?? []) as MatchRow[];
-  const updated: MatchStatusUpdate[] = [];
+  const beforeMatches = (beforeData ?? []) as MatchRow[];
+  const { error: refreshError } = await supabase.rpc("refresh_match_statuses");
+  if (refreshError) throw refreshError;
 
-  for (const match of matches) {
-    const windowPayload = predictionWindowPayload(match.start_time);
-    const nextStatus = calculateMatchStatus(
-      {
-        ...match,
-        prediction_close_at: windowPayload.prediction_close_at,
-        prediction_open_at: windowPayload.prediction_open_at
-      },
-      now,
-    );
+  const { data: afterData, error: afterError } = await supabase
+    .from("matches")
+    .select("id,home_team,away_team,start_time,prediction_open_at,prediction_close_at,status,deleted_at")
+    .is("deleted_at", null)
+    .neq("status", "encerrado");
 
-    const needsWindowUpdate =
-      match.prediction_open_at !== windowPayload.prediction_open_at ||
-      match.prediction_close_at !== windowPayload.prediction_close_at;
-    const needsStatusUpdate = match.status !== nextStatus;
+  if (afterError) throw afterError;
 
-    if (!needsWindowUpdate && !needsStatusUpdate) continue;
-
-    const updateResult = await supabase
-      .from("matches")
-      .update({
-        ...windowPayload,
-        status: nextStatus
-      })
-      .eq("id", match.id);
-
-    if (updateResult.error) throw updateResult.error;
-
-    updated.push({
-      from: match.status,
+  const beforeById = new Map(beforeMatches.map((match) => [match.id, match]));
+  const updated = ((afterData ?? []) as MatchRow[]).flatMap((match) => {
+    const previous = beforeById.get(match.id);
+    if (!previous || previous.status === match.status) return [];
+    return [{
+      from: previous.status,
       matchId: match.id,
       name: `${match.home_team} x ${match.away_team}`,
-      to: nextStatus
-    });
-  }
+      to: match.status
+    }];
+  });
 
   return {
-    checkedCount: matches.length,
+    checkedCount: beforeMatches.length,
     updated
   };
 };

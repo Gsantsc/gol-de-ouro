@@ -14,13 +14,15 @@ export const TournamentsScreen = ({
   predictions,
   tournaments,
   onDetails,
-  onPredict
+  onPredict,
+  predictionLockMinutes
 }: {
   matches: Match[];
   predictions: Prediction[];
   tournaments: Tournament[];
   onDetails: (match: Match) => void;
   onPredict: (match: Match) => void;
+  predictionLockMinutes: number;
 }) => {
   const worldCupTournament = useMemo(
     () => tournaments.find((tournament) => tournament.slug === "world_cup_2026"),
@@ -50,9 +52,9 @@ export const TournamentsScreen = ({
   const statusFilteredMatches = useMemo(
     () =>
       selectedMatches.filter((match) =>
-        statusFilter === "all" ? true : calculateMatchStatus(match) === statusFilter,
+        statusFilter === "all" ? true : calculateMatchStatus(match, new Date(), predictionLockMinutes) === statusFilter,
       ),
-    [selectedMatches, statusFilter],
+    [predictionLockMinutes, selectedMatches, statusFilter],
   );
   const matchGroups = useMemo(() => groupMatchesByDate(statusFilteredMatches), [statusFilteredMatches]);
 
@@ -147,6 +149,7 @@ export const TournamentsScreen = ({
               match={match}
               onDetails={() => onDetails(match)}
               onPredict={() => onPredict(match)}
+              predictionLockMinutes={predictionLockMinutes}
               prediction={predictions.find((prediction) => prediction.match_id === match.id)}
             />
           ))}

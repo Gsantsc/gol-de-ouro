@@ -49,9 +49,11 @@ const AppContent = () => {
     predictions,
     ranking,
     refresh,
+    settings,
     tournaments
   } =
     useFootballData(approvedUserId);
+  const predictionLockMinutes = settings.prediction_lock_minutes;
 
   const showToast = (message: string, tone: NonNullable<Toast>["tone"] = "info") => {
     setToast({ message, tone });
@@ -124,6 +126,7 @@ const AppContent = () => {
         onClose={() => setOverlay(null)}
         onSubmitted={refresh}
         players={players}
+        predictionLockMinutes={predictionLockMinutes}
         prediction={prediction}
       />
     );
@@ -173,6 +176,7 @@ const AppContent = () => {
           onViewPredictions={() => setActiveTab("predictions")}
           notifications={notifications}
           position={position}
+          predictionLockMinutes={predictionLockMinutes}
           predictions={predictions}
           profile={profile}
           ranking={myRanking}
@@ -183,11 +187,18 @@ const AppContent = () => {
           matches={matches}
           onDetails={openDetails}
           onPredict={openPrediction}
+          predictionLockMinutes={predictionLockMinutes}
           predictions={predictions}
           tournaments={tournaments}
         />
       ) : activeTab === "predictions" ? (
-        <PredictionsScreen matches={matches} players={players} predictions={predictions} ranking={myRanking} />
+        <PredictionsScreen
+          matches={matches}
+          players={players}
+          predictionLockMinutes={predictionLockMinutes}
+          predictions={predictions}
+          ranking={myRanking}
+        />
       ) : activeTab === "ranking" ? (
         <RankingScreen groups={groups} members={groupMembers} ranking={ranking} userId={profile.id} />
       ) : activeTab === "groups" ? (

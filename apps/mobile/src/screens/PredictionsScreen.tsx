@@ -34,11 +34,13 @@ const marketText = (value?: string | null) => value?.trim() || "-";
 export const PredictionsScreen = ({
   matches,
   players,
+  predictionLockMinutes,
   predictions,
   ranking
 }: {
   matches: Match[];
   players: Player[];
+  predictionLockMinutes: number;
   predictions: Prediction[];
   ranking: Ranking | null;
 }) => {
@@ -46,7 +48,7 @@ export const PredictionsScreen = ({
   const playerById = new Map(players.map((player) => [player.id, player]));
   const rows = predictions.map((prediction) => {
     const match = matches.find((item) => item.id === prediction.match_id);
-    const calculatedStatus = match ? calculateMatchStatus(match) : "fechado";
+    const calculatedStatus = match ? calculateMatchStatus(match, new Date(), predictionLockMinutes) : "fechado";
     const bucket =
       calculatedStatus === "aberto"
         ? "Em aberto"

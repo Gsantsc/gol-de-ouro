@@ -71,7 +71,8 @@
     "sync:espn:dry-run": "node scripts/sync-espn.cjs --dry-run && node scripts/jobs-matches.cjs --dry-run",
     "simulate:espn": "node scripts/simulate-espn-scenarios.cjs",
     "simulate:auto-sync": "node scripts/simulate-auto-sync-scenarios.cjs",
-    "simulate:auth-flow": "node scripts/simulate-auth-flow.cjs"
+    "simulate:auth-flow": "node scripts/simulate-auth-flow.cjs",
+    "beta:check": "node scripts/beta-readiness-check.cjs"
   },
   "devDependencies": {
     "@types/react": "~19.2.10",

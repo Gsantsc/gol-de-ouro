@@ -21,6 +21,12 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   background:
     linear-gradient(135deg, rgba(246, 211, 101, 0.075), transparent 30%),
@@ -31,6 +37,13 @@ body {
   min-height: 100vh;
   text-rendering: geometricPrecision;
   -webkit-font-smoothing: antialiased;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
 }
 
 body::before {
@@ -80,7 +93,7 @@ select {
   }
 
   .panel {
-    @apply rounded-lg border border-white/10 bg-pitch-800/90 shadow-panel backdrop-blur;
+    @apply max-w-full rounded-lg border border-white/10 bg-pitch-800/90 shadow-panel backdrop-blur;
   }
 
   .app-shell {
@@ -149,7 +162,7 @@ select {
   }
 
   .table-shell {
-    @apply overflow-x-auto rounded-lg border border-white/10 bg-black/10;
+    @apply max-w-full overflow-x-auto rounded-lg border border-white/10 bg-black/10;
   }
 
   .skeleton-line {

@@ -62,6 +62,7 @@ const emptyData: UserDashboardData = {
   players: [],
   predictions: [],
   ranking: [],
+  settings: { prediction_lock_minutes: 60 },
   tournaments: []
 };
 
@@ -302,6 +303,7 @@ export default function UserDashboardPage() {
   const myRanking = data.ranking.find((item) => item.user_id === profile?.id) ?? null;
   const position = data.ranking.findIndex((item) => item.user_id === profile?.id);
   const positionLabel = position >= 0 ? `#${position + 1}` : "-";
+  const predictionLockMinutes = data.settings.prediction_lock_minutes;
 
   const run = async (action: () => Promise<void>) => {
     if (busy) return;
@@ -446,10 +448,20 @@ export default function UserDashboardPage() {
         />
       )}
       {activeTab === "games" && (
-        <GamesPanel matches={visibleMatches} onPredict={setSelectedMatch} predictions={data.predictions} />
+        <GamesPanel
+          matches={visibleMatches}
+          onPredict={setSelectedMatch}
+          predictionLockMinutes={predictionLockMinutes}
+          predictions={data.predictions}
+        />
       )}
       {activeTab === "predictions" && (
-        <PredictionsPanel matches={data.matches} players={data.players} predictions={data.predictions} />
+        <PredictionsPanel
+          matches={data.matches}
+          players={data.players}
+          predictionLockMinutes={predictionLockMinutes}
+          predictions={data.predictions}
+        />
       )}
       {activeTab === "ranking" && (
         <RankingPanel
@@ -486,6 +498,7 @@ export default function UserDashboardPage() {
           match={selectedMatch}
           onClose={() => setSelectedMatch(null)}
           players={data.players}
+          predictionLockMinutes={predictionLockMinutes}
           prediction={data.predictions.find((prediction) => prediction.match_id === selectedMatch.id)}
           onSubmit={(payload) =>
             run(async () => {
@@ -664,6 +677,26 @@ const Metric = ({ label, value }: { label: string; value: number | string }) => 
   </div>
 );
 
+const HomeTeamFlag = ({ logoUrl, name }: { logoUrl?: string | null; name: string }) => {
+  const src = flagUrlForTeam(name, logoUrl);
+  return (
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/10 bg-pitch-950/60">
+      {src ? (
+        <img alt="" className="h-full w-full object-cover" src={src} />
+      ) : (
+        <span className="text-sm font-black text-gold">{name.slice(0, 2).toUpperCase()}</span>
+      )}
+    </div>
+  );
+};
+
+const BadgeRow = ({ active, label, value }: { active: boolean; label: string; value: string }) => (
+  <div className={`rounded-md border p-3 ${active ? "border-gold/35 bg-gold/10" : "border-white/10 bg-white/[0.035]"}`}>
+    <p className={`text-sm font-black ${active ? "text-gold" : "text-white/65"}`}>{label}</p>
+    <p className="mt-1 text-xs font-bold text-white/45">{value}</p>
+  </div>
+);
+
 const HomePanel = ({
   busy,
   data,
@@ -694,20 +727,38 @@ const HomePanel = ({
   ranking: Ranking | null;
 }) => {
   const [groupName, setGroupName] = useState("");
+  const now = new Date();
+  const lockMinutes = data.settings.prediction_lock_minutes;
   const worldCupTournamentId =
     data.tournaments.find((tournament) => tournament.slug === "world_cup_2026")?.id ?? data.tournaments[0]?.id;
   const predictedMatchIds = new Set(predictions.map((prediction) => prediction.match_id));
   const performance = deriveUserPerformance({ matches: data.matches, predictions, ranking });
-  const openMatches = matches.filter((match) => calculateMatchStatus(match) === "aberto");
+  const statusOf = (match: Match) => calculateMatchStatus(match, now, lockMinutes);
+  const openMatches = matches.filter((match) => statusOf(match) === "aberto");
   const nextMatch = openMatches.find((match) => !predictedMatchIds.has(match.id)) ?? openMatches[0] ?? matches[0] ?? null;
   const pendingPredictions = matches.filter(
-    (match) => calculateMatchStatus(match) === "aberto" && !predictedMatchIds.has(match.id),
+    (match) => statusOf(match) === "aberto" && !predictedMatchIds.has(match.id),
   ).length;
   const activeGroups = data.groups.filter((group) => !group.closed_at);
+  const liveMatches = data.matches.filter((match) => statusOf(match) === "ao_vivo").slice(0, 3);
+  const topRanking = data.ranking.slice(0, 10);
+  const nextMatches = matches
+    .filter((match) => statusOf(match) !== "encerrado")
+    .slice(0, 5);
   const finishedMatches = [...data.matches]
-    .filter((match) => calculateMatchStatus(match) === "encerrado")
+    .filter((match) => statusOf(match) === "encerrado")
     .sort((left, right) => new Date(right.start_time).getTime() - new Date(left.start_time).getTime())
     .slice(0, 3);
+  const exactBadges = ranking?.exact_scores ?? 0;
+  const leaderBadge = position === "#1";
+  const userCount = Math.max(data.ranking.length, data.groupMembers.length ? new Set(data.groupMembers.map((member) => member.user_id)).size : 0);
+  const totalHits = data.ranking.reduce((sum, item) => sum + (item.correct_results ?? 0), 0);
+  const stats = [
+    { label: "Usuários", value: userCount },
+    { label: "Palpites", value: predictions.length },
+    { label: "Jogos", value: data.matches.length },
+    { label: "Acertos", value: totalHits || performance.correctResults }
+  ];
   const derivedNotifications = [
     ranking?.total_points ? `Você já somou ${ranking.total_points} pontos no ranking.` : null,
     position !== "-" ? `Você está na posição ${position}.` : null,
@@ -717,136 +768,192 @@ const HomePanel = ({
   const activeAppInvite = data.appInvites.find((invite: AppInvite) => invite.status === "pending");
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-      <section className="space-y-4">
-        <div className="panel p-5">
-          <p className="text-xs font-black uppercase tracking-normal text-gold">USER HOME CENTER PRODUCT</p>
-          <h2 className="mt-2 text-2xl font-black">Central da rodada</h2>
-          <p className="mt-2 text-sm leading-6 text-white/60">
-            Resumo, próximo palpite, desempenho e atalhos. A lista completa fica em Jogos.
-          </p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-4">
-            <div className="metric-card">
-              <p className="text-2xl font-black text-gold">{ranking?.total_points ?? 0}</p>
-              <p className="text-xs font-bold text-white/55">pontos totais</p>
-            </div>
-            <div className="metric-card">
-              <p className="text-2xl font-black text-gold">{performance.correctResults}</p>
-              <p className="text-xs font-bold text-white/55">palpites corretos</p>
-            </div>
-            <div className="metric-card">
-              <p className="text-2xl font-black text-gold">{predictions.length}</p>
-              <p className="text-xs font-bold text-white/55">palpites realizados</p>
-            </div>
-            <div className="metric-card">
-              <p className="text-2xl font-black text-gold">{position}</p>
-              <p className="text-xs font-bold text-white/55">ranking geral</p>
+    <div className="space-y-6">
+      <section className="overflow-hidden rounded-lg border border-gold/20 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.20),transparent_32%),linear-gradient(135deg,rgba(18,24,38,0.98),rgba(6,10,18,0.98))] p-5 shadow-panel sm:p-7 lg:p-8">
+        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+          <div>
+            <p className="text-xs font-black uppercase tracking-normal text-gold">Gol de Ouro Beta 1.0</p>
+            <h2 className="mt-3 max-w-3xl text-3xl font-black leading-tight text-white sm:text-5xl">
+              Mostre quem realmente entende de futebol.
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70 sm:text-base">
+              Palpites, ranking em tempo real e disputa entre amigos.
+            </p>
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+              <button className="btn-primary w-full sm:w-auto" onClick={onViewGames} type="button">
+                <CalendarDays className="h-4 w-4" />
+                Entrar
+              </button>
+              <button className="btn-ghost w-full sm:w-auto" onClick={onViewGroups} type="button">
+                <UserPlus className="h-4 w-4" />
+                Cadastrar
+              </button>
             </div>
           </div>
-          <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-            {nextMatch && !predictedMatchIds.has(nextMatch.id) && calculateMatchStatus(nextMatch) === "aberto" && (
-              <button className="btn-primary flex-1" onClick={() => onPredict(nextMatch)} type="button">
-                <CheckCircle2 className="h-4 w-4" />
-                Palpitar agora
-              </button>
-            )}
-            <button className="btn-ghost flex-1" onClick={onViewPredictions} type="button">
-              <CheckCircle2 className="h-4 w-4" />
-              Ver Palpites
-            </button>
-            <button className="btn-ghost flex-1" onClick={onViewGames} type="button">
-              <CalendarDays className="h-4 w-4" />
-              Todos os jogos
-            </button>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Metric label="pontos" value={ranking?.total_points ?? 0} />
+            <Metric label="posição" value={position} />
+            <Metric label="palpites pendentes" value={pendingPredictions} />
+            <Metric label="fechamento" value={`${lockMinutes} min`} />
           </div>
         </div>
+      </section>
 
-        {showOnboarding && (
-          <div className="panel-muted p-5">
-            <p className="text-xs font-black uppercase tracking-normal text-gold">NEW USER ONBOARDING</p>
-            <h3 className="mt-2 text-xl font-black">Primeiros passos</h3>
-            <div className="mt-4 grid gap-3 sm:grid-cols-5">
-              {["Escolha um jogo", "Faça seu palpite", "Entre em ligas", "Ganhe pontos", "Suba no ranking"].map((step, index) => (
-                <div className="rounded-md border border-white/10 bg-white/[0.035] p-3" key={step}>
-                  <p className="text-lg font-black text-gold">{index + 1}</p>
-                  <p className="mt-2 text-sm font-black text-white/75">{step}</p>
-                </div>
-              ))}
-            </div>
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {stats.map((item) => (
+          <Metric key={item.label} label={item.label} value={item.value} />
+        ))}
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="panel p-5">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <SectionHeading title="Próximos jogos" />
+            <button className="btn-ghost w-full sm:w-auto" onClick={onViewGames} type="button">
+              Ver todos
+            </button>
           </div>
-        )}
-
-        <section className="space-y-3">
-          <SectionHeading title="Próximo palpite" />
-          {nextMatch ? (
-            <article className="panel p-5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs font-black uppercase tracking-normal text-gold">HOME NOT MATCHES LIST</p>
-                  <h3 className="mt-2 break-words text-2xl font-black">
-                    {nextMatch.home_team} x {nextMatch.away_team}
-                  </h3>
-                  <p className="mt-2 text-sm text-white/55">{formatDateTimePtBr(nextMatch.start_time)}</p>
-                  <p className="mt-3 text-sm font-bold text-white/70">
-                    Palpites encerram em: <span className="text-gold">{countdownLabel(nextMatch.prediction_close_at)}</span>
-                  </p>
-                </div>
-                <div className="min-w-[180px] rounded-lg border border-gold/30 bg-gold/10 p-4 text-center">
-                  <p className="text-xs font-black uppercase text-gold/80">Status</p>
-                  <p className="mt-1 text-lg font-black text-gold">{MATCH_STATUS_LABELS[calculateMatchStatus(nextMatch)]}</p>
-                  {predictedMatchIds.has(nextMatch.id) ? (
-                    <p className="mt-3 rounded-md border border-gold/30 px-3 py-2 text-sm font-black text-gold">Palpite enviado</p>
-                  ) : (
-                    <button
-                      className="btn-primary mt-3 w-full"
-                      disabled={!canSubmitPrediction(nextMatch).allowed}
-                      onClick={() => onPredict(nextMatch)}
-                      type="button"
-                    >
-                      Palpitar agora
-                    </button>
-                  )}
-                </div>
-              </div>
-            </article>
-          ) : (
-            <EmptyBlock title="Sem partidas" body="Não há partidas cadastradas para exibir agora." />
-          )}
-        </section>
-
-        <section className="space-y-3">
-          <SectionHeading title="Últimos resultados" />
-          {finishedMatches.length ? (
-            <div className="grid gap-3 md:grid-cols-3">
-              {finishedMatches.map((match) => {
-                const prediction = predictions.find((item) => item.match_id === match.id);
+          {nextMatches.length ? (
+            <div className="space-y-3">
+              {nextMatches.map((match) => {
+                const predictionAccess = canSubmitPrediction(match, null, now, lockMinutes);
+                const alreadyPredicted = predictedMatchIds.has(match.id);
                 return (
-                  <article className="panel-muted p-4" key={match.id}>
-                    <p className="text-sm font-black">{match.home_team} {match.home_score} x {match.away_score} {match.away_team}</p>
-                    <p className="mt-2 text-xs text-white/50">{formatDateTimePtBr(match.start_time)}</p>
-                    <p className="mt-3 text-sm font-black text-gold">
-                      {prediction ? `${prediction.points} pts` : "Sem palpite"}
-                    </p>
+                  <article className="rounded-lg border border-white/10 bg-white/[0.035] p-4" key={match.id}>
+                    <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <HomeTeamFlag name={match.home_team} logoUrl={match.home_team_logo_url} />
+                          <div className="min-w-0 flex-1 text-center">
+                            <p className="truncate text-sm font-black text-white">{match.home_team}</p>
+                            <p className="text-xs font-black uppercase text-gold">x</p>
+                            <p className="truncate text-sm font-black text-white">{match.away_team}</p>
+                          </div>
+                          <HomeTeamFlag name={match.away_team} logoUrl={match.away_team_logo_url} />
+                        </div>
+                        <p className="mt-3 text-xs font-bold text-white/55">{formatDateTimePtBr(match.start_time)}</p>
+                        <p className="mt-1 text-xs font-bold text-white/45">
+                          Palpites encerram em {countdownLabel(match.prediction_close_at)}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-2 md:min-w-[170px]">
+                        <span className="badge badge-gold justify-center">{MATCH_STATUS_LABELS[statusOf(match)]}</span>
+                        {alreadyPredicted ? (
+                          <span className="rounded-md border border-grass/30 bg-grass/10 px-3 py-2 text-center text-xs font-black text-grass">
+                            Palpite enviado
+                          </span>
+                        ) : (
+                          <button
+                            className="btn-primary w-full"
+                            disabled={!predictionAccess.allowed}
+                            onClick={() => onPredict(match)}
+                            type="button"
+                          >
+                            {predictionAccess.allowed ? "Palpitar" : "Encerrado"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </article>
                 );
               })}
             </div>
           ) : (
-            <EmptyBlock title="Sem resultados recentes" body="Quando jogos forem encerrados, eles aparecem aqui com seus pontos." />
+            <EmptyBlock title="Sem próximos jogos" body="Assim que novas partidas forem cadastradas, elas aparecem aqui." />
           )}
-        </section>
+        </div>
+
+        <div className="panel p-5">
+          <SectionHeading title="Ranking Top 10" />
+          <div className="mt-4 space-y-2">
+            {topRanking.length ? (
+              topRanking.map((item, index) => (
+                <div className="grid grid-cols-[44px_1fr_auto] items-center gap-3 rounded-md border border-white/10 bg-white/[0.035] px-3 py-2" key={item.id}>
+                  <span className="font-black text-gold">#{index + 1}</span>
+                  <span className="min-w-0 truncate text-sm font-black text-white/80">{item.user?.name ?? "Participante"}</span>
+                  <span className="text-sm font-black text-grass">{item.total_points} pts</span>
+                </div>
+              ))
+            ) : (
+              <EmptyBlock title="Ranking vazio" body="O ranking começa a andar quando os primeiros jogos forem pontuados." />
+            )}
+          </div>
+        </div>
       </section>
 
-      <section className="space-y-6">
+      <section className="grid gap-6 lg:grid-cols-3">
+        <div className="panel p-5 lg:col-span-2">
+          <SectionHeading title="Como funciona" />
+          <div className="mt-4 grid gap-3 sm:grid-cols-5">
+            {["Cadastro", "Aprovação", "Palpite", "Pontuação", "Ranking"].map((step, index) => (
+              <div className="rounded-lg border border-white/10 bg-white/[0.035] p-4" key={step}>
+                <p className="text-xl font-black text-gold">{index + 1}</p>
+                <p className="mt-2 text-sm font-black text-white/80">{step}</p>
+              </div>
+            ))}
+          </div>
+          {showOnboarding && (
+            <p className="mt-4 rounded-md border border-gold/20 bg-gold/10 p-3 text-sm font-bold leading-6 text-white/70">
+              Comece escolhendo um jogo aberto. Depois da aprovação, seus palpites contam automaticamente para o ranking.
+            </p>
+          )}
+        </div>
+
         <div className="panel p-5">
-          <SectionHeading title="Bolões e convites" />
+          <SectionHeading title="Badges" />
           <div className="mt-4 space-y-3">
+            <BadgeRow active={exactBadges > 0} label="Acertou placar" value={`${exactBadges} vez(es)`} />
+            <BadgeRow active={performance.correctResults > 0} label="Acertou vencedor" value={`${performance.correctResults} acerto(s)`} />
+            <BadgeRow active={leaderBadge} label="Líder da rodada" value={leaderBadge ? "Você está no topo" : "Em disputa"} />
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-3">
+        <div className="panel p-5">
+          <SectionHeading title="Partidas ao vivo" />
+          <div className="mt-4 space-y-3">
+            {liveMatches.length ? liveMatches.map((match) => (
+              <div className="rounded-md border border-red-400/20 bg-red-500/10 p-3" key={match.id}>
+                <p className="font-black">{match.home_team} {match.home_score} x {match.away_score} {match.away_team}</p>
+                <p className="mt-1 text-xs font-bold text-red-100/70">Ao vivo</p>
+              </div>
+            )) : (
+              <p className="text-sm leading-6 text-white/55">Nenhuma partida ao vivo agora.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="panel p-5">
+          <SectionHeading title="Últimos resultados" />
+          <div className="mt-4 space-y-3">
+            {finishedMatches.length ? finishedMatches.map((match) => {
+              const prediction = predictions.find((item) => item.match_id === match.id);
+              return (
+                <div className="rounded-md border border-white/10 bg-white/[0.035] p-3" key={match.id}>
+                  <p className="text-sm font-black">{match.home_team} {match.home_score} x {match.away_score} {match.away_team}</p>
+                  <p className="mt-2 text-xs text-white/50">{formatDateTimePtBr(match.start_time)}</p>
+                  <p className="mt-2 text-sm font-black text-gold">{prediction ? `${prediction.points} pts` : "Sem palpite"}</p>
+                </div>
+              );
+            }) : (
+              <p className="text-sm leading-6 text-white/55">Quando jogos forem encerrados, seus pontos aparecem aqui.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="panel p-5">
+          <SectionHeading title="Ligas e CTA" />
+          <div className="mt-4 space-y-3">
+            <button className="btn-primary w-full" onClick={onViewGames} type="button">
+              Entrar no bolão
+            </button>
             <button className="btn-ghost w-full" onClick={onViewGroups} type="button">
               Ver minhas ligas
             </button>
             <input className="input w-full" onChange={(event) => setGroupName(event.target.value)} placeholder="Nome da liga" value={groupName} />
             <button
-              className="btn-primary w-full"
+              className="btn-ghost w-full"
               disabled={busy || !groupName || !worldCupTournamentId}
               onClick={() =>
                 onCreateGroup(groupName, worldCupTournamentId ?? "").then(() => {
@@ -857,84 +964,55 @@ const HomePanel = ({
               <Plus className="h-4 w-4" />
               Criar liga
             </button>
-            <div className="rounded-md border border-white/10 bg-white/[0.035] p-3">
-              <div className="flex items-center gap-2">
-                <UserPlus className="h-4 w-4 text-gold" />
-                <p className="text-sm font-black text-white">Convidar amigo</p>
-              </div>
-              {activeAppInvite ? (
-                <div className="mt-3 space-y-2">
-                  <p className="break-all rounded-md border border-white/10 bg-black/15 px-3 py-2 text-xs font-bold text-gold">
-                    {activeAppInvite.invite_url}
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <button
-                      className="btn-ghost w-full"
-                      onClick={() => navigator.clipboard?.writeText(activeAppInvite.invite_url)}
-                      type="button"
-                    >
-                      <Copy className="h-4 w-4" />
-                      Copiar
-                    </button>
-                    <button
-                      className="btn-ghost w-full"
-                      onClick={() => onRevokeAppInvite(activeAppInvite.id)}
-                      type="button"
-                    >
-                      Revogar
-                    </button>
-                  </div>
+            {activeAppInvite ? (
+              <div className="rounded-md border border-white/10 bg-white/[0.035] p-3">
+                <p className="break-all text-xs font-bold text-gold">{activeAppInvite.invite_url}</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <button className="btn-ghost w-full" onClick={() => navigator.clipboard?.writeText(activeAppInvite.invite_url)} type="button">
+                    <Copy className="h-4 w-4" />
+                    Copiar
+                  </button>
+                  <button className="btn-ghost w-full" onClick={() => onRevokeAppInvite(activeAppInvite.id)} type="button">
+                    Revogar
+                  </button>
                 </div>
-              ) : (
-                <button
-                  className="btn-ghost mt-3 w-full"
-                  disabled={busy}
-                  onClick={onCreateAppInvite}
-                  type="button"
-                >
-                  <Share2 className="h-4 w-4" />
-                  Gerar link do app
-                </button>
-              )}
+              </div>
+            ) : (
+              <button className="btn-ghost w-full" disabled={busy} onClick={onCreateAppInvite} type="button">
+                <Share2 className="h-4 w-4" />
+                Convidar amigo
+              </button>
+            )}
+            <div className="space-y-2 border-t border-white/10 pt-3">
+              {activeGroups.slice(0, 2).map((group) => (
+                <p className="truncate text-sm font-bold text-white/60" key={group.id}>{group.name}</p>
+              ))}
+              {!activeGroups.length && <p className="text-sm text-white/55">Você ainda não participa de ligas.</p>}
             </div>
           </div>
-          <div className="mt-5 space-y-3 border-t border-white/10 pt-4">
-            {activeGroups.slice(0, 3).map((group) => (
-              <div className="flex items-center justify-between gap-3" key={group.id}>
-                <div>
-                  <p className="font-black">{group.name}</p>
-                  <p className="text-xs text-white/50">{group.tournament?.name ?? "Campeonato"}</p>
-                </div>
-                <span className="rounded-full border border-white/10 px-3 py-1 text-xs font-black text-gold">
-                  {group.closed_at ? "Fechado" : "Ativo"}
-                </span>
-              </div>
-            ))}
-            {!data.groups.length && <p className="text-sm text-white/55">Você ainda não participa de ligas.</p>}
-          </div>
         </div>
+      </section>
 
-        <div className="panel p-5">
-          <SectionHeading title="Notificações" />
-          <div className="mt-4 space-y-3">
-            {data.notifications.length ? (
-              data.notifications.slice(0, 5).map((notification) => (
-                <div className="border-b border-white/10 pb-3" key={notification.id}>
-                  <p className="font-black">{notification.title}</p>
-                  <p className="mt-1 text-sm leading-6 text-white/60">{notification.body}</p>
-                </div>
-              ))
-            ) : derivedNotifications.length ? (
-              derivedNotifications.map((message) => (
-                <div className="border-b border-white/10 pb-3" key={message}>
-                  <p className="font-black">Atualização</p>
-                  <p className="mt-1 text-sm leading-6 text-white/60">{message}</p>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-white/55">Sem notificações no momento.</p>
-            )}
-          </div>
+      <section className="panel p-5">
+        <SectionHeading title="Notificações" />
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {data.notifications.length ? (
+            data.notifications.slice(0, 4).map((notification) => (
+              <div className="rounded-md border border-white/10 bg-white/[0.035] p-3" key={notification.id}>
+                <p className="font-black">{notification.title}</p>
+                <p className="mt-1 text-sm leading-6 text-white/60">{notification.body}</p>
+              </div>
+            ))
+          ) : derivedNotifications.length ? (
+            derivedNotifications.map((message) => (
+              <div className="rounded-md border border-white/10 bg-white/[0.035] p-3" key={message}>
+                <p className="font-black">Atualização</p>
+                <p className="mt-1 text-sm leading-6 text-white/60">{message}</p>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-white/55">Sem notificações no momento.</p>
+          )}
         </div>
       </section>
     </div>
@@ -944,10 +1022,12 @@ const HomePanel = ({
 const GamesPanel = ({
   matches,
   onPredict,
+  predictionLockMinutes,
   predictions
 }: {
   matches: Match[];
   onPredict: (match: Match) => void;
+  predictionLockMinutes: number;
   predictions: Prediction[];
 }) => {
   const [query, setQuery] = useState("");
@@ -957,13 +1037,13 @@ const GamesPanel = ({
   const filteredMatches = useMemo(
     () =>
       matches.filter((match) => {
-        const calculatedStatus = calculateMatchStatus(match);
+        const calculatedStatus = calculateMatchStatus(match, new Date(), predictionLockMinutes);
         const matchesQuery = `${match.home_team} ${match.away_team}`.toLowerCase().includes(query.toLowerCase());
         const matchesStatus = status === "all" || calculatedStatus === status;
         const matchesDate = !date || match.start_time.slice(0, 10) === date;
         return matchesQuery && matchesStatus && matchesDate;
       }),
-    [date, matches, query, status],
+    [date, matches, predictionLockMinutes, query, status],
   );
 
   return (
@@ -1004,6 +1084,7 @@ const GamesPanel = ({
               key={match.id}
               match={match}
               onPredict={onPredict}
+              predictionLockMinutes={predictionLockMinutes}
               prediction={predictions.find((item) => item.match_id === match.id)}
             />
           ))}
@@ -1018,18 +1099,20 @@ const GamesPanel = ({
 const MatchCard = ({
   match,
   onPredict,
+  predictionLockMinutes,
   prediction
 }: {
   match: Match;
   onPredict: (match: Match) => void;
+  predictionLockMinutes: number;
   prediction?: Prediction;
 }) => {
   const city = cityForStadium(match.stadium);
-  const calculatedStatus = calculateMatchStatus(match);
-  const predictionAccess = canSubmitPrediction(match);
+  const calculatedStatus = calculateMatchStatus(match, new Date(), predictionLockMinutes);
+  const predictionAccess = canSubmitPrediction(match, null, new Date(), predictionLockMinutes);
   const canEditOrPredict = predictionAccess.allowed;
   const actionLabel = prediction
-    ? "Editar"
+    ? canEditOrPredict ? "Editar" : "Encerrado"
     : canEditOrPredict
       ? "Palpitar"
       : calculatedStatus === "encerrado"
@@ -1124,11 +1207,21 @@ const TeamFlag = ({
   </div>
 );
 
-const PredictionsPanel = ({ matches, players, predictions }: { matches: Match[]; players: Player[]; predictions: Prediction[] }) => {
+const PredictionsPanel = ({
+  matches,
+  players,
+  predictionLockMinutes,
+  predictions
+}: {
+  matches: Match[];
+  players: Player[];
+  predictionLockMinutes: number;
+  predictions: Prediction[];
+}) => {
   const playerById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
   const rows = predictions.map((prediction) => {
     const match = matches.find((item) => item.id === prediction.match_id);
-    const calculatedStatus = match ? calculateMatchStatus(match) : "fechado";
+    const calculatedStatus = match ? calculateMatchStatus(match, new Date(), predictionLockMinutes) : "fechado";
     const status = predictionStatus(prediction, match);
     const bucket =
       calculatedStatus === "aberto"
@@ -1643,12 +1736,14 @@ const PredictionDialog = ({
   match,
   onClose,
   players,
+  predictionLockMinutes,
   prediction,
   onSubmit
 }: {
   match: Match;
   onClose: () => void;
   players: Player[];
+  predictionLockMinutes: number;
   prediction?: Prediction;
   onSubmit: (payload: PredictionSubmitPayload) => Promise<void>;
 }) => {
@@ -1664,6 +1759,7 @@ const PredictionDialog = ({
   );
   const parsedHomeScore = normalizePredictionScore(homeScore);
   const parsedAwayScore = normalizePredictionScore(awayScore);
+  const predictionAccess = canSubmitPrediction(match, null, new Date(), predictionLockMinutes);
   const firstScorerLabel = firstGoalNoGoals
     ? "Sem gols"
     : players.find((player) => player.id === firstScorerId)?.name ?? "Não selecionado";
@@ -1675,6 +1771,7 @@ const PredictionDialog = ({
         className="w-full max-w-2xl panel p-6 shadow-panel"
         onSubmit={(event) => {
           event.preventDefault();
+          if (!predictionAccess.allowed) return;
           onSubmit({
             awayScore: parsedAwayScore,
             bothTeamsScore,
@@ -1779,7 +1876,9 @@ const PredictionDialog = ({
         </div>
 
         <div className="mt-5 rounded-md border border-gold/20 bg-gold/10 p-3 text-xs font-bold leading-5 text-white/65">
-          A tela Jogos mostra apenas que o palpite foi enviado. O detalhe completo fica salvo na aba Palpites.
+          {predictionAccess.allowed
+            ? "A tela Jogos mostra apenas que o palpite foi enviado. O detalhe completo fica salvo na aba Palpites."
+            : "Palpites encerrados para esta partida."}
         </div>
         <div className="mt-4 rounded-md border border-pitch-600 bg-pitch-950/35 p-3">
           <p className="text-xs font-black uppercase text-gold">Resumo do palpite</p>
@@ -1794,7 +1893,9 @@ const PredictionDialog = ({
         </div>
         <div className="mt-6 flex gap-2">
           <button className="btn-ghost flex-1" onClick={onClose} type="button">Cancelar</button>
-          <button className="btn-primary flex-1" type="submit">{prediction ? "Salvar edição" : "Enviar"}</button>
+          <button className="btn-primary flex-1" disabled={!predictionAccess.allowed} type="submit">
+            {predictionAccess.allowed ? (prediction ? "Salvar edição" : "Enviar") : "Encerrado"}
+          </button>
         </div>
       </form>
     </div>

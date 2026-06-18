@@ -314,12 +314,13 @@ const updateLocalStatusWindows = async (
   matches: MatchRow[],
   now: Date,
   dryRun: boolean,
+  predictionLockMinutes: number,
 ) => {
   let updated = 0;
 
   for (const match of matches) {
     if (match.status === "encerrado") continue;
-    const windowPayload = predictionWindowPayload(match.start_time);
+    const windowPayload = predictionWindowPayload(match.start_time, predictionLockMinutes);
     const nextStatus = calculateMatchStatus(
       {
         ...match,
@@ -347,8 +348,9 @@ const applyEspnEvent = async (
   event: EspnMatch,
   now: Date,
   dryRun: boolean,
+  predictionLockMinutes: number,
 ) => {
-  const windowPayload = predictionWindowPayload(match.start_time);
+  const windowPayload = predictionWindowPayload(match.start_time, predictionLockMinutes);
   const localStatus = calculateMatchStatus(
     {
       ...match,
@@ -393,6 +395,13 @@ const applyEspnEvent = async (
     finished: status === "encerrado",
     live: status === "ao_vivo",
   };
+};
+
+const readPredictionLockMinutes = async (supabase: SupabaseClient) => {
+  const { data, error } = await supabase.rpc("get_app_settings");
+  if (error) return 60;
+  const value = Number(data?.[0]?.prediction_lock_minutes ?? 60);
+  return [60, 90, 120, 180].includes(value) ? value : 60;
 };
 
 const fetchProviderEvents = async (matches: MatchRow[], now: Date, providerName: string, errors: string[]) => {
@@ -843,18 +852,19 @@ export const runLiveResultsSync = async ({
 
   try {
     const allMatches = await listMatches(supabase);
+    const predictionLockMinutes = await readPredictionLockMinutes(supabase);
     const predictions = await listPredictions(supabase);
     const predictionsByMatch = groupPredictionsByMatch(predictions);
     const scopedMatches = allMatches.filter((match) => isInSyncScope(match, predictionsByMatch, now, force));
     checkedMatches = scopedMatches.length;
 
-    updatedMatches += await updateLocalStatusWindows(supabase, scopedMatches, now, dryRun);
+    updatedMatches += await updateLocalStatusWindows(supabase, scopedMatches, now, dryRun, predictionLockMinutes);
 
     const events = await fetchProviderEvents(scopedMatches, now, providerName, errors);
     for (const event of events) {
       const match = findMatchForEspnEvent(scopedMatches, event);
       if (!match) continue;
-      const result = await applyEspnEvent(supabase, match, event, now, dryRun);
+      const result = await applyEspnEvent(supabase, match, event, now, dryRun, predictionLockMinutes);
       updatedMatches += 1;
       if (result.live) liveMatches += 1;
       if (result.finished) finishedMatches += 1;

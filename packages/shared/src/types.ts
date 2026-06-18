@@ -204,6 +204,10 @@ export type AdminMetrics = {
   total_predictions: number;
 };
 
+export type AppSettings = {
+  prediction_lock_minutes: 60 | 90 | 120 | 180;
+};
+
 export type Group = {
   id: string;
   name: string;

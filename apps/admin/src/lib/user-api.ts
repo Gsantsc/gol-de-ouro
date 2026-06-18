@@ -1,5 +1,6 @@
 import type {
   Achievement,
+  AppSettings,
   AppInvite,
   Group,
   GroupMember,
@@ -40,6 +41,7 @@ export type UserDashboardData = {
   players: Player[];
   predictions: Prediction[];
   ranking: Ranking[];
+  settings: AppSettings;
   tournaments: Tournament[];
 };
 
@@ -177,7 +179,8 @@ export const loadUserDashboardData = async (userId: string): Promise<UserDashboa
     groupsResult,
     groupMembersResult,
     notificationsResult,
-    appInvitesResult
+    appInvitesResult,
+    settingsResult
   ] = await withSupabaseTimeout(Promise.all([
     supabase
       .from("achievements")
@@ -214,7 +217,8 @@ export const loadUserDashboardData = async (userId: string): Promise<UserDashboa
       .select("*")
       .eq("inviter_user_id", userId)
       .order("created_at", { ascending: false })
-      .limit(10)
+      .limit(10),
+    supabase.rpc("get_app_settings")
   ]), "Tempo esgotado ao carregar o dashboard.");
 
   const results = [
@@ -228,7 +232,8 @@ export const loadUserDashboardData = async (userId: string): Promise<UserDashboa
     groupsResult,
     groupMembersResult,
     notificationsResult,
-    appInvitesResult
+    appInvitesResult,
+    settingsResult
   ];
   const failed = results.find((result) => result.error);
   if (failed?.error) throw failed.error;
@@ -254,6 +259,7 @@ export const loadUserDashboardData = async (userId: string): Promise<UserDashboa
     players: (playersResult.data ?? []) as Player[],
     predictions: (predictionsResult.data ?? []) as Prediction[],
     ranking: sortRankings(((rankingResult.data ?? []) as Ranking[]).map(withPublicUser)),
+    settings: ((settingsResult.data?.[0] ?? { prediction_lock_minutes: 60 }) as AppSettings),
     tournaments: (tournamentsResult.data ?? []) as Tournament[]
   };
 };
@@ -345,24 +351,17 @@ export const submitUserPrediction = async ({
   userId: string;
 }) => {
   const { error } = await withSupabaseTimeout(
-    supabase
-      .from("predictions")
-      .upsert({
-        match_id: matchId,
-        predicted_away_score: awayScore,
-        predicted_both_teams_score: bothTeamsScore,
-        predicted_first_scorer: null,
-        predicted_first_scorer_id: firstScorerId,
-        predicted_first_goal_no_goals: firstGoalNoGoals,
-        predicted_home_score: homeScore,
-        predicted_man_of_match: null,
-        predicted_man_of_match_id: manOfMatchId,
-        predicted_red_card: redCard,
-        predicted_winner: winner,
-        user_id: userId
-      }, {
-        onConflict: "user_id,match_id"
-      }),
+    supabase.rpc("submit_prediction", {
+      away_score_value: awayScore,
+      both_teams_score_value: bothTeamsScore,
+      first_goal_no_goals_value: firstGoalNoGoals,
+      first_scorer_id_value: firstScorerId,
+      home_score_value: homeScore,
+      man_of_match_id_value: manOfMatchId,
+      predicted_winner_value: winner,
+      red_card_value: redCard,
+      target_match_id: matchId
+    }),
     "Tempo esgotado ao salvar o palpite."
   );
 

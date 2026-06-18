@@ -1,17 +1,17 @@
 const HOUR_MS = 60 * 60 * 1000;
 
-const calculatePredictionWindow = (startTime) => {
+const calculatePredictionWindow = (startTime, lockMinutes = 60) => {
   const startAt = new Date(startTime);
   return {
-    prediction_close_at: new Date(startAt.getTime() - HOUR_MS).toISOString(),
+    prediction_close_at: new Date(startAt.getTime() - lockMinutes * 60 * 1000).toISOString(),
     prediction_open_at: new Date(startAt.getTime() - 24 * HOUR_MS).toISOString(),
   };
 };
 
-const calculateMatchStatus = (match, now) => {
+const calculateMatchStatus = (match, now, lockMinutes = 60) => {
   if (match.status === "encerrado") return "encerrado";
 
-  const windowPayload = calculatePredictionWindow(match.start_time);
+  const windowPayload = calculatePredictionWindow(match.start_time, lockMinutes);
   const openAt = new Date(windowPayload.prediction_open_at);
   const closeAt = new Date(windowPayload.prediction_close_at);
 
@@ -106,6 +106,22 @@ const failures = cases.flatMap(([now, expected]) => {
   return actual === expected ? [] : [{ actual, expected, now }];
 });
 
+const lockCases = [
+  [60, "2026-06-11T17:59:00.000Z", "aberto"],
+  [60, "2026-06-11T18:00:00.000Z", "ao_vivo"],
+  [90, "2026-06-11T17:29:00.000Z", "aberto"],
+  [90, "2026-06-11T17:30:00.000Z", "ao_vivo"],
+  [120, "2026-06-11T16:59:00.000Z", "aberto"],
+  [120, "2026-06-11T17:00:00.000Z", "ao_vivo"],
+  [180, "2026-06-11T15:59:00.000Z", "aberto"],
+  [180, "2026-06-11T16:00:00.000Z", "ao_vivo"],
+];
+
+for (const [lockMinutes, now, expected] of lockCases) {
+  const actual = calculateMatchStatus(match, new Date(now), lockMinutes);
+  if (actual !== expected) failures.push({ actual, expected, lockMinutes, now });
+}
+
 const official = {
   awayScore: 1,
   firstScorer: "Hirving Lozano",
@@ -162,6 +178,7 @@ if (failures.length) {
 } else {
   console.log(JSON.stringify({
     match: `${match.home_team} x ${match.away_team}`,
+    lockCases: lockCases.length,
     scoringCases: scoringCases.length,
     status: "ok",
     statusCases: cases.length,

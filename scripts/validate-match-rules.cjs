@@ -14,9 +14,11 @@ const calculateMatchStatus = (match, now, lockMinutes = 60) => {
   const windowPayload = calculatePredictionWindow(match.start_time, lockMinutes);
   const openAt = new Date(windowPayload.prediction_open_at);
   const closeAt = new Date(windowPayload.prediction_close_at);
+  const startAt = new Date(match.start_time);
 
   if (now < openAt) return "fechado";
   if (now < closeAt) return "aberto";
+  if (now < startAt) return "fechado";
   return "ao_vivo";
 };
 
@@ -97,7 +99,8 @@ const cases = [
   ["2026-06-10T18:59:00.000Z", "fechado"],
   ["2026-06-10T19:00:00.000Z", "aberto"],
   ["2026-06-11T17:59:00.000Z", "aberto"],
-  ["2026-06-11T18:00:00.000Z", "ao_vivo"],
+  ["2026-06-11T18:00:00.000Z", "fechado"],
+  ["2026-06-11T19:00:00.000Z", "ao_vivo"],
   ["2026-06-11T22:00:00.000Z", "ao_vivo"],
 ];
 
@@ -108,13 +111,14 @@ const failures = cases.flatMap(([now, expected]) => {
 
 const lockCases = [
   [60, "2026-06-11T17:59:00.000Z", "aberto"],
-  [60, "2026-06-11T18:00:00.000Z", "ao_vivo"],
+  [60, "2026-06-11T18:00:00.000Z", "fechado"],
   [90, "2026-06-11T17:29:00.000Z", "aberto"],
-  [90, "2026-06-11T17:30:00.000Z", "ao_vivo"],
+  [90, "2026-06-11T17:30:00.000Z", "fechado"],
   [120, "2026-06-11T16:59:00.000Z", "aberto"],
-  [120, "2026-06-11T17:00:00.000Z", "ao_vivo"],
+  [120, "2026-06-11T17:00:00.000Z", "fechado"],
   [180, "2026-06-11T15:59:00.000Z", "aberto"],
-  [180, "2026-06-11T16:00:00.000Z", "ao_vivo"],
+  [180, "2026-06-11T16:00:00.000Z", "fechado"],
+  [180, "2026-06-11T19:00:00.000Z", "ao_vivo"],
 ];
 
 for (const [lockMinutes, now, expected] of lockCases) {

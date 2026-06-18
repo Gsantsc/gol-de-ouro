@@ -68,9 +68,11 @@ export const calculateMatchStatus = (
   if (match.status === "encerrado") return "encerrado";
 
   const { closeAt, openAt } = resolvePredictionWindow(match, predictionLockMinutes);
+  const startAt = readDate(match.start_time, closeAt);
 
   if (now < openAt) return "fechado";
   if (now < closeAt) return "aberto";
+  if (now < startAt) return "fechado";
   return "ao_vivo";
 };
 

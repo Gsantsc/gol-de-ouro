@@ -109,6 +109,7 @@ begin
     status = case
       when now() < start_time - interval '24 hours' then 'fechado'::public.match_status
       when now() < start_time - make_interval(mins => lock_minutes) then 'aberto'::public.match_status
+      when now() < start_time then 'fechado'::public.match_status
       else 'ao_vivo'::public.match_status
     end
   where deleted_at is null
@@ -119,6 +120,7 @@ begin
       or status is distinct from case
         when now() < start_time - interval '24 hours' then 'fechado'::public.match_status
         when now() < start_time - make_interval(mins => lock_minutes) then 'aberto'::public.match_status
+        when now() < start_time then 'fechado'::public.match_status
         else 'ao_vivo'::public.match_status
       end
     );

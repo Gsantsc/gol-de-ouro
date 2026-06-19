@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Share, StyleSheet, Text, View } from "react-native";
 import { Bell, CalendarCheck, ChevronRight, Copy, Medal, RadioTower, Share2, UserPlus, Users, XCircle } from "lucide-react-native";
 import type { AppInvite, Group, Match, Notification, Prediction, Profile, Ranking, Tournament } from "../shared";
-import { calculateMatchStatus, deriveUserPerformance, formatDateTimePtBr } from "../shared";
+import { calculateMatchStatus, deriveUserPerformance, formatDateTimePtBr, formatMatchupDisplayName } from "../shared";
 import { MatchCard } from "../components/MatchCard";
 import {
   AppButton,
@@ -263,7 +263,7 @@ export const HomeScreen = ({
           <View key={nextMatch.id} style={styles.noticeRow}>
             <Text style={styles.noticeTitle}>Próximo jogo</Text>
             <Text style={styles.noticeBody}>
-              {nextMatch.home_team} x {nextMatch.away_team} - {formatDateTimePtBr(nextMatch.start_time)}
+              {formatMatchupDisplayName(nextMatch.home_team, nextMatch.away_team)} - {formatDateTimePtBr(nextMatch.start_time)}
             </Text>
           </View>
         ) : (

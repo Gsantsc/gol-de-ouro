@@ -6,6 +6,7 @@ import {
   calculateMatchStatus,
   canSubmitPrediction,
   formatDateTimePtBr,
+  getTeamDisplayName,
   MATCH_STATUS_LABELS
 } from "../shared";
 import { colors, radius, spacing } from "../theme/tokens";
@@ -209,6 +210,7 @@ const TeamLine = ({
     .slice(0, 2)
     .toUpperCase();
   const flagUrl = logoUrl || flagUrlForTeam(name);
+  const displayName = getTeamDisplayName(name);
 
   return (
     <View style={styles.teamLine}>
@@ -219,7 +221,7 @@ const TeamLine = ({
           <Text style={styles.badgeText}>{initials}</Text>
         )}
       </View>
-      <Text numberOfLines={1} style={styles.teamName}>{name}</Text>
+      <Text numberOfLines={1} style={styles.teamName}>{displayName}</Text>
       <View style={styles.scoreBadge}>
         <Text style={styles.scoreText}>{score}</Text>
       </View>

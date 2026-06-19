@@ -4,6 +4,7 @@ export * from "./prediction-window-service";
 export * from "./scoring";
 export * from "./time";
 export * from "./constants";
+export * from "./team-display";
 export * from "./qr";
 export * from "./services/matches-provider";
 export * from "./error-handler";

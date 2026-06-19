@@ -29,6 +29,8 @@ import {
   canSubmitPrediction,
   deriveUserPerformance,
   formatDateTimePtBr,
+  formatMatchupDisplayName,
+  getTeamDisplayName,
   readAuthError,
   readError
 } from "@gol-de-ouro/shared";
@@ -172,8 +174,8 @@ const countdownLabel = (dateValue?: string | null) => {
 };
 
 const winnerLabel = (winner?: PredictionWinner | null, match?: Match) => {
-  if (winner === "home") return match?.home_team ?? "Casa";
-  if (winner === "away") return match?.away_team ?? "Visitante";
+  if (winner === "home") return getTeamDisplayName(match?.home_team) || "Casa";
+  if (winner === "away") return getTeamDisplayName(match?.away_team) || "Visitante";
   if (winner === "draw") return "Empate";
   return "-";
 };
@@ -762,7 +764,7 @@ const HomePanel = ({
   const derivedNotifications = [
     ranking?.total_points ? `Você já somou ${ranking.total_points} pontos no ranking.` : null,
     position !== "-" ? `Você está na posição ${position}.` : null,
-    nextMatch ? `Palpites para ${nextMatch.home_team} x ${nextMatch.away_team} encerram em ${countdownLabel(nextMatch.prediction_close_at)}.` : null
+    nextMatch ? `Palpites para ${formatMatchupDisplayName(nextMatch.home_team, nextMatch.away_team)} encerram em ${countdownLabel(nextMatch.prediction_close_at)}.` : null
   ].filter(Boolean) as string[];
   const showOnboarding = !predictions.length && !data.groups.length;
   const activeAppInvite = data.appInvites.find((invite: AppInvite) => invite.status === "pending");
@@ -825,9 +827,9 @@ const HomePanel = ({
                         <div className="flex min-w-0 items-center gap-3">
                           <HomeTeamFlag name={match.home_team} logoUrl={match.home_team_logo_url} />
                           <div className="min-w-0 flex-1 text-center">
-                            <p className="truncate text-sm font-black text-white">{match.home_team}</p>
+                            <p className="truncate text-sm font-black text-white">{getTeamDisplayName(match.home_team)}</p>
                             <p className="text-xs font-black uppercase text-gold">x</p>
-                            <p className="truncate text-sm font-black text-white">{match.away_team}</p>
+                            <p className="truncate text-sm font-black text-white">{getTeamDisplayName(match.away_team)}</p>
                           </div>
                           <HomeTeamFlag name={match.away_team} logoUrl={match.away_team_logo_url} />
                         </div>
@@ -915,7 +917,7 @@ const HomePanel = ({
           <div className="mt-4 space-y-3">
             {liveMatches.length ? liveMatches.map((match) => (
               <div className="rounded-md border border-red-400/20 bg-red-500/10 p-3" key={match.id}>
-                <p className="font-black">{match.home_team} {match.home_score} x {match.away_score} {match.away_team}</p>
+                <p className="font-black">{getTeamDisplayName(match.home_team)} {match.home_score} x {match.away_score} {getTeamDisplayName(match.away_team)}</p>
                 <p className="mt-1 text-xs font-bold text-red-100/70">Ao vivo</p>
               </div>
             )) : (
@@ -931,7 +933,7 @@ const HomePanel = ({
               const prediction = predictions.find((item) => item.match_id === match.id);
               return (
                 <div className="rounded-md border border-white/10 bg-white/[0.035] p-3" key={match.id}>
-                  <p className="text-sm font-black">{match.home_team} {match.home_score} x {match.away_score} {match.away_team}</p>
+                  <p className="text-sm font-black">{getTeamDisplayName(match.home_team)} {match.home_score} x {match.away_score} {getTeamDisplayName(match.away_team)}</p>
                   <p className="mt-2 text-xs text-white/50">{formatDateTimePtBr(match.start_time)}</p>
                   <p className="mt-2 text-sm font-black text-gold">{prediction ? `${prediction.points} pts` : "Sem palpite"}</p>
                 </div>
@@ -1038,7 +1040,7 @@ const GamesPanel = ({
     () =>
       matches.filter((match) => {
         const calculatedStatus = calculateMatchStatus(match, new Date(), predictionLockMinutes);
-        const matchesQuery = `${match.home_team} ${match.away_team}`.toLowerCase().includes(query.toLowerCase());
+        const matchesQuery = `${match.home_team} ${match.away_team} ${formatMatchupDisplayName(match.home_team, match.away_team)}`.toLowerCase().includes(query.toLowerCase());
         const matchesStatus = status === "all" || calculatedStatus === status;
         const matchesDate = !date || match.start_time.slice(0, 10) === date;
         return matchesQuery && matchesStatus && matchesDate;
@@ -1177,6 +1179,7 @@ const Team = ({
   name: string;
 }) => {
   const flagUrl = flagUrlForTeam(name, logoUrl);
+  const displayName = getTeamDisplayName(name);
   const initials = name
     .split(" ")
     .map((part) => part[0])
@@ -1187,7 +1190,7 @@ const Team = ({
   return (
     <div className={`flex min-w-0 items-center gap-3 ${alignRight ? "justify-end text-right" : ""}`}>
       {!alignRight && <TeamFlag flagUrl={flagUrl} initials={initials} name={name} />}
-      <p className="min-w-0 break-words text-base font-black">{name}</p>
+      <p className="min-w-0 break-words text-base font-black">{displayName}</p>
       {alignRight && <TeamFlag flagUrl={flagUrl} initials={initials} name={name} />}
     </div>
   );
@@ -1286,7 +1289,7 @@ const PredictionSection = ({
         rows.map(({ calculatedStatus, match, prediction, status }) => (
           <article className="grid gap-3 rounded-md border border-white/10 bg-white/[0.035] p-3 lg:grid-cols-[1fr_auto_auto]" key={prediction.id}>
             <div className="min-w-0">
-              <p className="truncate font-black">{match ? `${match.home_team} x ${match.away_team}` : "Partida"}</p>
+              <p className="truncate font-black">{match ? formatMatchupDisplayName(match.home_team, match.away_team) : "Partida"}</p>
               <p className="mt-1 text-xs text-white/55">
                 Jogo: {match ? formatDateTimePtBr(match.start_time) : "Data indisponível"}
               </p>
@@ -1787,10 +1790,10 @@ const PredictionDialog = ({
         }}
       >
         <h2 className="text-2xl font-black">{prediction ? "Editar palpite" : "Palpitar"}</h2>
-        <p className="mt-2 text-sm text-white/60">{match.home_team} x {match.away_team}</p>
+        <p className="mt-2 text-sm text-white/60">{formatMatchupDisplayName(match.home_team, match.away_team)}</p>
         <div className="mt-6 grid grid-cols-[1fr_auto_1fr] items-end gap-3">
           <label className="block">
-            <span className="text-sm font-bold text-white/70">{match.home_team}</span>
+            <span className="text-sm font-bold text-white/70">{getTeamDisplayName(match.home_team)}</span>
             <input
               className="input mt-2 w-full text-center"
               inputMode="numeric"
@@ -1805,7 +1808,7 @@ const PredictionDialog = ({
           </label>
           <span className="pb-3 text-xl font-black text-white/35">x</span>
           <label className="block">
-            <span className="text-sm font-bold text-white/70">{match.away_team}</span>
+            <span className="text-sm font-bold text-white/70">{getTeamDisplayName(match.away_team)}</span>
             <input
               className="input mt-2 w-full text-center"
               inputMode="numeric"
@@ -1824,9 +1827,9 @@ const PredictionDialog = ({
           <p className="text-sm font-black text-white/70">Vencedor</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-3">
             {([
-              ["home", match.home_team],
+              ["home", getTeamDisplayName(match.home_team)],
               ["draw", "Empate"],
-              ["away", match.away_team],
+              ["away", getTeamDisplayName(match.away_team)],
             ] as Array<[PredictionWinner, string]>).map(([value, label]) => (
               <button
                 className={`segmented-chip ${winner === value ? "segmented-chip-active" : "segmented-chip-idle"}`}

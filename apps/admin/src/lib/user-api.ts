@@ -43,6 +43,54 @@ const readOptionalResult = <T>(
   return result.data ?? fallback;
 };
 
+const readSupabaseErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message?: unknown }).message ?? "");
+  }
+  return "";
+};
+
+const shouldFallbackToPredictionUpsert = (error: unknown) => {
+  const message = readSupabaseErrorMessage(error).toLowerCase();
+  return message.includes("submit_prediction")
+    && (
+      message.includes("could not find")
+      || message.includes("schema cache")
+      || message.includes("function")
+    );
+};
+
+const predictionSubmitMessage = (error: unknown) => {
+  const message = readSupabaseErrorMessage(error);
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("sessao") || normalized.includes("session") || normalized.includes("jwt")) {
+    return "Sessão expirada. Entre novamente.";
+  }
+  if (normalized.includes("aprovado") || normalized.includes("bloqueado")) {
+    return "Seu cadastro ainda não está liberado para palpitar.";
+  }
+  if (normalized.includes("palpites encerr") || normalized.includes("janela") || normalized.includes("não aceita")) {
+    return "Palpites encerrados para esta partida.";
+  }
+  if (normalized.includes("abrem 24h")) {
+    return "Palpites abrem 24h antes do jogo.";
+  }
+  if (normalized.includes("placar")) {
+    return "Placar inválido. Revise os gols informados.";
+  }
+  if (normalized.includes("vencedor")) {
+    return "Selecione um vencedor válido.";
+  }
+  if (normalized.includes("partida")) {
+    return "Partida não encontrada ou indisponível.";
+  }
+
+  return "Não foi possível enviar seu palpite agora. Tente novamente.";
+};
+
 const authDebugCounts = {
   fetchProfile: 0,
   getSession: 0,
@@ -375,20 +423,50 @@ export const submitUserPrediction = async ({
   winner: PredictionWinner;
   userId: string;
 }) => {
+  const rpcPayload = {
+    away_score_value: awayScore,
+    both_teams_score_value: bothTeamsScore,
+    first_goal_no_goals_value: firstGoalNoGoals,
+    first_scorer_id_value: firstGoalNoGoals ? null : firstScorerId,
+    home_score_value: homeScore,
+    man_of_match_id_value: manOfMatchId,
+    predicted_winner_value: winner,
+    red_card_value: redCard,
+    target_match_id: matchId
+  };
+  const directPayload = {
+    match_id: matchId,
+    predicted_away_score: awayScore,
+    predicted_both_teams_score: bothTeamsScore,
+    predicted_first_goal_no_goals: firstGoalNoGoals,
+    predicted_first_scorer: null,
+    predicted_first_scorer_id: firstGoalNoGoals ? null : firstScorerId,
+    predicted_home_score: homeScore,
+    predicted_man_of_match: null,
+    predicted_man_of_match_id: manOfMatchId,
+    predicted_red_card: redCard,
+    predicted_winner: winner,
+    user_id: userId
+  };
+
   const { error } = await withSupabaseTimeout(
-    supabase.rpc("submit_prediction", {
-      away_score_value: awayScore,
-      both_teams_score_value: bothTeamsScore,
-      first_goal_no_goals_value: firstGoalNoGoals,
-      first_scorer_id_value: firstScorerId,
-      home_score_value: homeScore,
-      man_of_match_id_value: manOfMatchId,
-      predicted_winner_value: winner,
-      red_card_value: redCard,
-      target_match_id: matchId
-    }),
+    supabase.rpc("submit_prediction", rpcPayload),
     "Tempo esgotado ao salvar o palpite."
   );
+  if (!error) return;
 
-  if (error) throw error;
+  if (shouldFallbackToPredictionUpsert(error)) {
+    debugLog("[USER PREDICTION] submit_prediction RPC unavailable. Trying direct upsert fallback.");
+    const { error: upsertError } = await withSupabaseTimeout(
+      supabase.from("predictions").upsert(directPayload, { onConflict: "user_id,match_id" }),
+      "Tempo esgotado ao salvar o palpite."
+    );
+
+    if (!upsertError) return;
+    debugLog("[USER PREDICTION] direct upsert failed", readSupabaseErrorMessage(upsertError));
+    throw new Error(predictionSubmitMessage(upsertError));
+  }
+
+  debugLog("[USER PREDICTION] submit failed", readSupabaseErrorMessage(error));
+  throw new Error(predictionSubmitMessage(error));
 };

@@ -7,6 +7,8 @@ import {
   PREDICTION_SCORE_MIN,
   canSubmitPrediction,
   formatDateTimePtBr,
+  formatMatchupDisplayName,
+  getTeamDisplayName,
   predictionOutcome
 } from "../shared";
 import { AppButton, Card, IconButton, Screen, Subtitle, Title, ToastBanner } from "../components/ui";
@@ -63,11 +65,30 @@ export const PredictionScreen = ({
   const canSubmit = predictionAccess.allowed;
   const firstScorerPlayer = players.find((player) => player.id === firstScorerId) ?? null;
   const manOfMatchPlayer = players.find((player) => player.id === manOfMatchId) ?? null;
+  const homeTeamName = getTeamDisplayName(match.home_team);
+  const awayTeamName = getTeamDisplayName(match.away_team);
   const firstScorerLabel = firstGoalNoGoals ? "Sem gols" : firstScorerPlayer?.name ?? "Não selecionado";
   const manOfMatchLabel = manOfMatchPlayer?.name ?? "Não selecionado";
 
+  const validateBeforeSubmit = () => {
+    if (!profile) return "Sessão expirada. Entre novamente.";
+    if (!canSubmit) return predictionAccess.message;
+    if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) {
+      return "Preencha o placar para enviar seu palpite.";
+    }
+    if (!winner) return "Selecione o vencedor para continuar.";
+    return null;
+  };
+
   const submit = async () => {
-    if (loading || !profile || !canSubmit) return;
+    if (loading) return;
+
+    const validationError = validateBeforeSubmit();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    if (!profile) return;
 
     try {
       setLoading(true);
@@ -92,7 +113,8 @@ export const PredictionScreen = ({
       await onSubmitted();
       setTimeout(onClose, 900);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Palpite não enviado. Tente novamente.");
+      if (__DEV__) console.warn("[PREDICTION SUBMIT]", nextError);
+      setError(nextError instanceof Error ? nextError.message : "Não foi possível enviar seu palpite agora. Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -104,10 +126,10 @@ export const PredictionScreen = ({
       <Card variant="accent">
         <View style={styles.header}>
           <View style={styles.headerText}>
-            <Text style={styles.eyebrow}>Palpite completo</Text>
+            <Text style={styles.eyebrow}>Palpite</Text>
             <Title>{prediction ? "Editar palpite" : "Monte seu palpite"}</Title>
             <Subtitle>
-              {match.home_team} x {match.away_team}
+              {formatMatchupDisplayName(match.home_team, match.away_team)}
             </Subtitle>
           </View>
           <IconButton label="Fechar" onPress={onClose}>
@@ -123,7 +145,7 @@ export const PredictionScreen = ({
         {submitted ? (
           <View style={styles.confirmed}>
             <CheckCircle2 color={colors.gold} size={42} />
-            <Text style={styles.confirmedTitle}>{prediction ? "Palpite atualizado" : "Palpite registrado"}</Text>
+            <Text style={styles.confirmedTitle}>{prediction ? "Palpite atualizado com sucesso." : "Palpite enviado com sucesso."}</Text>
             <Text style={styles.confirmedScore}>{homeScore} x {awayScore}</Text>
             <Text style={styles.confirmedBody}>Placar e mercados extras ficam salvos na aba Palpites.</Text>
           </View>
@@ -131,14 +153,14 @@ export const PredictionScreen = ({
           <>
             <View style={styles.scoreInput}>
               <Stepper
-                label={match.home_team}
+                label={homeTeamName}
                 onDec={() => setHomeScore((value) => clampPredictionScore(value - 1))}
                 onInc={() => setHomeScore((value) => clampPredictionScore(value + 1))}
                 value={homeScore}
               />
               <Text style={styles.vs}>x</Text>
               <Stepper
-                label={match.away_team}
+                label={awayTeamName}
                 onDec={() => setAwayScore((value) => clampPredictionScore(value - 1))}
                 onInc={() => setAwayScore((value) => clampPredictionScore(value + 1))}
                 value={awayScore}
@@ -154,9 +176,9 @@ export const PredictionScreen = ({
             <View style={styles.marketSection}>
               <Text style={styles.marketTitle}>Vencedor</Text>
               <View style={styles.choiceGrid}>
-                <ChoiceButton active={winner === "home"} label={match.home_team} onPress={() => setWinner("home")} />
+                <ChoiceButton active={winner === "home"} label={homeTeamName} onPress={() => setWinner("home")} />
                 <ChoiceButton active={winner === "draw"} label="Empate" onPress={() => setWinner("draw")} />
-                <ChoiceButton active={winner === "away"} label={match.away_team} onPress={() => setWinner("away")} />
+                <ChoiceButton active={winner === "away"} label={awayTeamName} onPress={() => setWinner("away")} />
               </View>
             </View>
 
@@ -191,7 +213,7 @@ export const PredictionScreen = ({
               <Text style={styles.summaryTitle}>Resumo do palpite</Text>
               <View style={styles.summaryGrid}>
                 <SummaryItem label="Placar" value={`${homeScore} x ${awayScore}`} />
-                <SummaryItem label="Vencedor" value={winner === "home" ? match.home_team : winner === "away" ? match.away_team : "Empate"} />
+                <SummaryItem label="Vencedor" value={winner === "home" ? homeTeamName : winner === "away" ? awayTeamName : "Empate"} />
                 <SummaryItem label="Primeiro jogador" value={firstScorerLabel} />
                 <SummaryItem label="Homem do jogo" value={manOfMatchLabel} />
                 <SummaryItem label="Ambos marcam" value={boolLabel(bothTeamsScore)} />
@@ -292,7 +314,7 @@ const PlayerPicker = ({
             <View style={styles.modalHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.eyebrow}>{label}</Text>
-                <Text style={styles.modalTitle}>{match.home_team} x {match.away_team}</Text>
+                <Text style={styles.modalTitle}>{formatMatchupDisplayName(match.home_team, match.away_team)}</Text>
               </View>
               <IconButton label="Fechar seletor" onPress={() => setOpen(false)}>
                 <X color={colors.text} size={18} />
@@ -324,7 +346,7 @@ const PlayerPicker = ({
               ) : null}
               {groups.map((group) => (
                 <View key={group.name} style={styles.playerGroup}>
-                  <Text style={styles.playerGroupTitle}>{group.name}</Text>
+                  <Text style={styles.playerGroupTitle}>{getTeamDisplayName(group.name)}</Text>
                   {group.players.length ? group.players.map((player) => {
                     const active = player.id === selectedPlayerId && !noGoals;
                     return (

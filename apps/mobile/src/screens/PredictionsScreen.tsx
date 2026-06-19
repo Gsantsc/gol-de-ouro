@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { CheckCircle2, Clock3, Target } from "lucide-react-native";
 import type { Match, Player, Prediction, PredictionWinner, Ranking } from "../shared";
-import { calculateMatchStatus, deriveUserPerformance, formatDateTimePtBr } from "../shared";
+import { calculateMatchStatus, deriveUserPerformance, formatDateTimePtBr, formatMatchupDisplayName, getTeamDisplayName } from "../shared";
 import { Card, EmptyState, MetricTile, Pill, ScreenScroll, SectionTitle } from "../components/ui";
 import { colors, radius, spacing } from "../theme/tokens";
 
@@ -17,8 +17,8 @@ const getStatusTone = (status: string) => {
 };
 
 const winnerLabel = (winner?: PredictionWinner | null, match?: Match) => {
-  if (winner === "home") return match?.home_team ?? "Casa";
-  if (winner === "away") return match?.away_team ?? "Visitante";
+  if (winner === "home") return getTeamDisplayName(match?.home_team) || "Casa";
+  if (winner === "away") return getTeamDisplayName(match?.away_team) || "Visitante";
   if (winner === "draw") return "Empate";
   return "-";
 };
@@ -89,7 +89,7 @@ export const PredictionsScreen = ({
                     <View key={prediction.id} style={styles.row}>
                       <View style={styles.content}>
                         <Text numberOfLines={1} style={styles.match}>
-                          {match ? `${match.home_team} x ${match.away_team}` : "Partida indisponivel"}
+                          {match ? formatMatchupDisplayName(match.home_team, match.away_team) : "Partida indisponivel"}
                         </Text>
                         <Text style={styles.date}>
                           {match ? formatDateTimePtBr(match.start_time) : "Data indisponivel"}

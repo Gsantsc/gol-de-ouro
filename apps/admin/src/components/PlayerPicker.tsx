@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Search, UserRound, X } from "lucide-react";
 import type { Match, Player } from "@gol-de-ouro/shared";
+import { formatMatchupDisplayName, getTeamDisplayName } from "@gol-de-ouro/shared";
 
 type PlayerPickerProps = {
   disabled?: boolean;
@@ -80,7 +81,7 @@ export const PlayerPicker = ({
             <header className="flex items-start justify-between gap-4 border-b border-pitch-600 p-4">
               <div>
                 <p className="text-xs font-black uppercase text-gold">{label}</p>
-                <h3 className="mt-1 text-xl font-black">{match.home_team} x {match.away_team}</h3>
+                <h3 className="mt-1 text-xl font-black">{formatMatchupDisplayName(match.home_team, match.away_team)}</h3>
               </div>
               <button className="btn-icon" onClick={() => setOpen(false)} type="button">
                 <X className="h-4 w-4" />
@@ -120,7 +121,7 @@ export const PlayerPicker = ({
               <div className="space-y-5">
                 {groups.map((group) => (
                   <section key={group.name}>
-                    <p className="mb-2 text-xs font-black uppercase text-gold">{group.name}</p>
+                    <p className="mb-2 text-xs font-black uppercase text-gold">{getTeamDisplayName(group.name)}</p>
                     {group.players.length ? (
                       <div className="grid gap-2 sm:grid-cols-2">
                         {group.players.map((player) => {

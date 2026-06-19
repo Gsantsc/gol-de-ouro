@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { ArrowLeft, EyeOff } from "lucide-react-native";
 import type { Match, Prediction } from "../shared";
-import { EVENT_LABELS, formatFullDatePtBr, MATCH_STATUS_LABELS } from "../shared";
+import { EVENT_LABELS, formatFullDatePtBr, getTeamDisplayName, MATCH_STATUS_LABELS } from "../shared";
 import { StatGrid } from "../components/StatGrid";
 import { useMatchDetails } from "../hooks/useMatchDetails";
 import { AppButton, Card, Pill, Screen, SectionTitle, Subtitle, Title } from "../components/ui";
@@ -38,13 +38,13 @@ export const MatchDetailsScreen = ({
           <Text style={styles.date}>{formatFullDatePtBr(match.start_time)}</Text>
         </View>
         <View style={styles.scoreLine}>
-          <Text style={styles.team}>{match.home_team}</Text>
+          <Text style={styles.team}>{getTeamDisplayName(match.home_team)}</Text>
           <View style={styles.scoreBox}>
             <Text style={styles.score}>{match.home_score}</Text>
             <Text style={styles.scoreMuted}>x</Text>
             <Text style={styles.score}>{match.away_score}</Text>
           </View>
-          <Text style={[styles.team, styles.teamRight]}>{match.away_team}</Text>
+          <Text style={[styles.team, styles.teamRight]}>{getTeamDisplayName(match.away_team)}</Text>
         </View>
         {myPrediction ? (
           <View style={styles.mineBox}>

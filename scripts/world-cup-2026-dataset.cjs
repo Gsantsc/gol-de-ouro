@@ -50,6 +50,10 @@ const groupPairings = [
 ];
 
 const toIso = (date, time) => `${date}T${time}.000Z`;
+const kickoffOverrides = {
+  "static-wc2026-korea-republic-czechia": "2026-06-12T02:00:00.000Z",
+  "static-wc2026-mexico-south-africa": "2026-06-11T19:00:00.000Z",
+};
 const predictionWindow = (startTime) => {
   const startAt = new Date(startTime);
   return {
@@ -76,8 +80,9 @@ const buildGroupStageMatches = () => {
         const time = timeSlots[(groupIndex + pairIndex + pairingSet.matchday) % timeSlots.length];
         const homeTeam = group.teams[pair[0]];
         const awayTeam = group.teams[pair[1]];
-        const startTime = toIso(date, time);
-        matches.push({ awayTeam, city: venue.city, country: venue.country, group: group.code, homeTeam, matchNumber, providerExternalId: externalIdFor(matchNumber, homeTeam, awayTeam), round: `Grupo ${group.code} - Rodada ${pairingSet.matchday}`, stage: "group", stadium: venue.stadium, startTime, ...predictionWindow(startTime) });
+        const providerExternalId = externalIdFor(matchNumber, homeTeam, awayTeam);
+        const startTime = kickoffOverrides[providerExternalId] ?? toIso(date, time);
+        matches.push({ awayTeam, city: venue.city, country: venue.country, group: group.code, homeTeam, matchNumber, providerExternalId, round: `Grupo ${group.code} - Rodada ${pairingSet.matchday}`, stage: "group", stadium: venue.stadium, startTime, ...predictionWindow(startTime) });
         matchNumber += 1;
       }
     }

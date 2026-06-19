@@ -6,16 +6,16 @@ const staticWC2026Fixtures = [
     home_team: "Mexico",
     provider_external_id: "static-wc2026-mexico-south-africa",
     round: "Grupo A",
-    stadium: "Estadio a confirmar",
-    start_time: "2026-06-11T16:00:00.000Z",
+    stadium: "Estadio Banorte",
+    start_time: "2026-06-11T19:00:00.000Z",
   },
   {
     away_team: "Czechia",
     home_team: "Korea Republic",
     provider_external_id: "static-wc2026-korea-republic-czechia",
     round: "Grupo",
-    stadium: "Estadio a confirmar",
-    start_time: "2026-06-11T23:00:00.000Z",
+    stadium: "Estadio Guadalajara",
+    start_time: "2026-06-12T02:00:00.000Z",
   },
 ];
 

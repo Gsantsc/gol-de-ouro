@@ -56,6 +56,8 @@ export const GroupsScreen = ({
       setBusy(false);
     }
   };
+  const inviteLinkFor = (group: Group) =>
+    group.invite_url || `https://goldeouro.app/invite/group/${group.invite_token || group.invite_code}`;
 
   return (
     <>
@@ -100,8 +102,9 @@ export const GroupsScreen = ({
         const selected = selectedGroupId === group.id;
         const myPosition = rankedMembers.findIndex((member) => member.user_id === userId);
         const myPoints = rankings.find((ranking) => ranking.user_id === userId)?.total_points ?? 0;
-        const deepLink = `goldeouro://join/group/${group.invite_token}`;
-        const webLink = group.invite_url;
+        const inviteToken = group.invite_token || group.invite_code;
+        const deepLink = `goldeouro://join/group/${inviteToken}`;
+        const webLink = inviteLinkFor(group);
 
         return (
           <Card key={group.id}>
@@ -112,7 +115,7 @@ export const GroupsScreen = ({
                     {group.tournament?.name ?? "Campeonato"} - {groupMembers.length} participantes
                 </Text>
               </View>
-              {selected ? <MiniQr value={webLink} /> : null}
+              {selected && webLink ? <MiniQr value={webLink} /> : null}
             </View>
             <View style={styles.leagueStats}>
               <View style={styles.leagueMetric}>
@@ -217,7 +220,7 @@ export const GroupsScreen = ({
 };
 
 const MiniQr = ({ value }: { value: string }) => {
-  const matrix = createQrMatrix(value);
+  const matrix = createQrMatrix(value || "https://goldeouro.app");
   const size = matrix.length;
 
   return (

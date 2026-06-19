@@ -27,6 +27,9 @@ const normalize = (value: string) =>
 
 const matchTeam = (player: Player, teamName: string) => normalize(player.team_name) === normalize(teamName);
 
+const isPlaceholderTeam = (teamName: string) =>
+  /^(TBD|Winner |Loser |Runner-up |Third Place )/i.test(teamName.trim());
+
 const boolLabel = (value: boolean) => (value ? "Sim" : "Não");
 
 export const PredictionScreen = ({
@@ -347,7 +350,9 @@ const PlayerPicker = ({
               {groups.map((group) => (
                 <View key={group.name} style={styles.playerGroup}>
                   <Text style={styles.playerGroupTitle}>{getTeamDisplayName(group.name)}</Text>
-                  {group.players.length ? group.players.map((player) => {
+                  {isPlaceholderTeam(group.name) ? (
+                    <Text style={styles.emptyPlayers}>Jogadores disponiveis apos definicao da equipe.</Text>
+                  ) : group.players.length ? group.players.map((player) => {
                     const active = player.id === selectedPlayerId && !noGoals;
                     return (
                       <Pressable

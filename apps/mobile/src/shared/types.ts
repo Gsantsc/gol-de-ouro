@@ -27,12 +27,14 @@ export type EventType = "goal" | "yellow_card" | "red_card" | "substitution";
 export type Player = {
   id: string;
   name: string;
+  team_id?: string | null;
   team_code: string;
   team_name: string;
   position?: string | null;
   shirt_number?: number | null;
   active: boolean;
   source?: string | null;
+  source_updated_at?: string | null;
   external_id?: string | null;
   created_at?: string;
   updated_at?: string;

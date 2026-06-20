@@ -54,47 +54,29 @@ Resultado: aprovado
 {
   "groupAStandings": [
     {
-      "drawn": 0,
+      "drawn": 1,
       "form": [
         "W",
-        "L",
-        "W"
+        "W",
+        "D"
       ],
-      "goal_difference": 1,
-      "goals_against": 2,
-      "goals_for": 3,
+      "goal_difference": 3,
+      "goals_against": 1,
+      "goals_for": 4,
       "group_code": "A",
-      "lost": 1,
+      "lost": 0,
       "played": 3,
-      "points": 6,
+      "points": 7,
       "position": 1,
       "team_name": "Mexico",
       "won": 2
     },
     {
-      "drawn": 2,
-      "form": [
-        "D",
-        "W",
-        "D"
-      ],
-      "goal_difference": 2,
-      "goals_against": 2,
-      "goals_for": 4,
-      "group_code": "A",
-      "lost": 0,
-      "played": 3,
-      "points": 5,
-      "position": 2,
-      "team_name": "Korea Republic",
-      "won": 1
-    },
-    {
       "drawn": 1,
       "form": [
         "D",
-        "W",
-        "L"
+        "L",
+        "W"
       ],
       "goal_difference": 0,
       "goals_against": 2,
@@ -103,26 +85,44 @@ Resultado: aprovado
       "lost": 1,
       "played": 3,
       "points": 4,
-      "position": 3,
-      "team_name": "Czechia",
+      "position": 2,
+      "team_name": "Korea Republic",
       "won": 1
     },
     {
-      "drawn": 1,
+      "drawn": 0,
       "form": [
         "L",
-        "L",
-        "D"
+        "W",
+        "L"
       ],
-      "goal_difference": -3,
-      "goals_against": 4,
-      "goals_for": 1,
+      "goal_difference": -1,
+      "goals_against": 3,
+      "goals_for": 2,
       "group_code": "A",
       "lost": 2,
       "played": 3,
-      "points": 1,
-      "position": 4,
+      "points": 3,
+      "position": 3,
       "team_name": "South Africa",
+      "won": 1
+    },
+    {
+      "drawn": 2,
+      "form": [
+        "D",
+        "L",
+        "D"
+      ],
+      "goal_difference": -2,
+      "goals_against": 4,
+      "goals_for": 2,
+      "group_code": "A",
+      "lost": 1,
+      "played": 3,
+      "points": 2,
+      "position": 4,
+      "team_name": "Czechia",
       "won": 0
     }
   ],

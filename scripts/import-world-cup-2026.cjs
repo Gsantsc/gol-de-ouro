@@ -47,13 +47,18 @@ const ensureTournament = async (dataset) => {
   return created[0];
 };
 
-const findExistingMatch = async (providerName, providerExternalId) => {
+const findExistingMatch = async (providerName, providerExternalId, matchNumber, championship) => {
   const rows = await rest(`matches?select=*&provider_name=eq.${providerName}&provider_external_id=eq.${encodeURIComponent(providerExternalId)}&limit=1`);
-  return rows?.[0] ?? null;
+  if (rows?.[0]) return rows[0];
+
+  const byNumber = await rest(
+    `matches?select=*&provider_name=eq.${providerName}&championship=eq.${championship}&stats->>match_number=eq.${matchNumber}&limit=1`,
+  );
+  return byNumber?.[0] ?? null;
 };
 
 const upsertMatch = async ({ dataset, match, tournamentId }) => {
-  const existing = await findExistingMatch(dataset.providerName, match.providerExternalId);
+  const existing = await findExistingMatch(dataset.providerName, match.providerExternalId, match.matchNumber, dataset.championship);
   const preserveOfficialResult = existing?.status === "encerrado";
   const homeScore = preserveOfficialResult ? existing.home_score : Number(existing?.home_score ?? 0);
   const awayScore = preserveOfficialResult ? existing.away_score : Number(existing?.away_score ?? 0);
@@ -72,14 +77,26 @@ const upsertMatch = async ({ dataset, match, tournamentId }) => {
     round: match.round,
     stadium: match.stadium,
     start_time: match.startTime,
+    start_time_utc: match.kickoffUtc ?? match.startTime,
     status: preserveOfficialResult ? "encerrado" : calculateStatus(match),
+    venue_timezone: match.venueTimezone,
+    source_timezone: match.venueTimezone,
+    kickoff_source: match.source ?? "espn_fifa_world_cup_scoreboard",
+    kickoff_verified_at: new Date().toISOString(),
+    display_time_br: match.kickoffBrt ?? null,
     stats: {
       city: match.city,
       country: match.country,
+      espn_event_id: match.eventId,
       group: match.group,
+      kickoff_brt: match.kickoffBrt,
+      kickoff_local: match.kickoffLocal,
       match_number: match.matchNumber,
-      source: "static-world-cup-2026-dataset",
+      source: match.source ?? "espn_fifa_world_cup_scoreboard",
+      source_away_team: match.sourceAwayTeam,
+      source_home_team: match.sourceHomeTeam,
       stage: match.stage,
+      venue_timezone: match.venueTimezone,
     },
     tournament_id: tournamentId,
   };

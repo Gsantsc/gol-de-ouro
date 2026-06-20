@@ -1,23 +1,23 @@
-const HOUR_MS = 60 * 60 * 1000;
+const fs = require("fs");
+const path = require("path");
 
-const staticWC2026Fixtures = [
-  {
-    away_team: "South Africa",
-    home_team: "Mexico",
-    provider_external_id: "static-wc2026-mexico-south-africa",
-    round: "Grupo A",
-    stadium: "Estadio Banorte",
-    start_time: "2026-06-11T19:00:00.000Z",
-  },
-  {
-    away_team: "Czechia",
-    home_team: "Korea Republic",
-    provider_external_id: "static-wc2026-korea-republic-czechia",
-    round: "Grupo",
-    stadium: "Estadio Guadalajara",
-    start_time: "2026-06-12T02:00:00.000Z",
-  },
-];
+const HOUR_MS = 60 * 60 * 1000;
+const DATASET_PATH = path.resolve(__dirname, "..", "data", "world-cup-2026.json");
+
+const readOpeningFixtures = () => {
+  const dataset = JSON.parse(fs.readFileSync(DATASET_PATH, "utf8"));
+  return (dataset.matches ?? []).slice(0, 2).map((match) => ({
+    away_team: match.away_team,
+    home_team: match.home_team,
+    provider_external_id: match.provider_external_id,
+    round: match.round,
+    stadium: match.venue,
+    start_time: match.kickoff_utc,
+    venue_timezone: match.venue_timezone,
+  }));
+};
+
+const staticWC2026Fixtures = readOpeningFixtures();
 
 const defaultStats = () => ({
   cornersAway: 0,
@@ -73,9 +73,15 @@ const staticWC2026Payloads = (tournamentId) =>
     round: fixture.round,
     stadium: fixture.stadium,
     start_time: fixture.start_time,
-    stats: defaultStats(),
+    start_time_utc: fixture.start_time,
+    stats: {
+      ...defaultStats(),
+      source: "espn_fifa_world_cup_scoreboard",
+      venue_timezone: fixture.venue_timezone,
+    },
     status: calculateStatus(fixture.start_time),
     tournament_id: tournamentId,
+    venue_timezone: fixture.venue_timezone,
   }));
 
 module.exports = {

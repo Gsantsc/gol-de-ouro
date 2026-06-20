@@ -60,11 +60,26 @@ const normalizeTeam = (value: string) =>
     .replace(/[^a-z0-9]+/gi, " ")
     .trim()
     .toLowerCase()
+    .replace(/^cape verde$/, "cabo verde")
+    .replace(/^curacao$/, "curacao")
+    .replace(/^iran$/, "ir iran")
+    .replace(/^ivory coast$/, "cote d ivoire")
     .replace(/^south korea$/, "korea republic")
-    .replace(/^usa$/, "united states");
+    .replace(/^turkiye$/, "turkey")
+    .replace(/^united states$/, "usa");
 
 const sameKickoffWindow = (left: string, right: string) => Math.abs(new Date(left).getTime() - new Date(right).getTime()) <= 8 * 60 * 60 * 1000;
 const looseKickoffWindow = (left: string, right: string) => Math.abs(new Date(left).getTime() - new Date(right).getTime()) <= 36 * 60 * 60 * 1000;
+
+const canonicalTeam = (value: string) => ({
+  "Cape Verde": "Cabo Verde",
+  "Curaçao": "Curacao",
+  "Iran": "IR Iran",
+  "Ivory Coast": "Cote d'Ivoire",
+  "South Korea": "Korea Republic",
+  "Türkiye": "Turkey",
+  "United States": "USA",
+}[value] ?? value);
 
 // MATCH ESPN MAPPING
 const findMatchForEspnEvent = (matches: MatchRow[], event: EspnMatch) => {
@@ -255,10 +270,10 @@ const applyEspnResult = async (supabase: SupabaseClient, match: MatchRow, event:
   const stats = { ...(match.stats ?? {}), espn_event_id: event.eventId, espn_status: event.rawStatusName, espn_status_detail: event.statusDetail };
   const payload = {
     away_score: event.away.score,
-    away_team: event.away.displayName,
+    away_team: canonicalTeam(event.away.displayName),
     away_team_logo_url: event.away.logo,
     home_score: event.home.score,
-    home_team: event.home.displayName,
+    home_team: canonicalTeam(event.home.displayName),
     home_team_logo_url: event.home.logo,
     last_synced_at: new Date().toISOString(),
     start_time: event.date,

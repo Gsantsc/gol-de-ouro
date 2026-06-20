@@ -88,11 +88,17 @@ export type Match = {
   red_cards_home?: number;
   red_cards_away?: number;
   start_time: string;
+  start_time_utc?: string | null;
   prediction_open_at: string;
   prediction_close_at: string;
   status: MatchStatus;
   championship?: string | null;
   stadium?: string | null;
+  venue_timezone?: string | null;
+  source_timezone?: string | null;
+  kickoff_source?: string | null;
+  kickoff_verified_at?: string | null;
+  display_time_br?: string | null;
   round?: string | null;
   provider_name?: string | null;
   provider_external_id?: string | null;

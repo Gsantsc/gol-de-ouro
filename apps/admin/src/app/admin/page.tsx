@@ -43,7 +43,7 @@ import type {
   Tournament,
   TournamentType
 } from "@gol-de-ouro/shared";
-import { CHAMPIONSHIP_LABELS, MATCH_STATUS_LABELS, TOURNAMENT_LABELS, calculateMatchStatus, createQrMatrix, formatFullDatePtBr, readError, readAuthError } from "@gol-de-ouro/shared";
+import { CHAMPIONSHIP_LABELS, MATCH_STATUS_LABELS, TOURNAMENT_LABELS, calculateMatchStatus, createQrMatrix, formatFullDatePtBr, formatMatchDateTime, getMatchDisplayDateKey, readError, readAuthError } from "@gol-de-ouro/shared";
 import {
   approveUser,
   closeGroup,
@@ -2230,15 +2230,8 @@ const ConfirmDialog = ({
 );
 
 const groupMatchesByDate = (matches: Match[]) => {
-  const formatter = new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    weekday: "short"
-  });
-
   return matches.reduce<Array<{ key: string; label: string; matches: Match[] }>>((groups, match) => {
-    const date = new Date(match.start_time);
-    const key = date.toISOString().slice(0, 10);
+    const key = getMatchDisplayDateKey(match);
     const currentGroup = groups.find((group) => group.key === key);
 
     if (currentGroup) {
@@ -2248,7 +2241,7 @@ const groupMatchesByDate = (matches: Match[]) => {
 
     groups.push({
       key,
-      label: formatter.format(date),
+      label: formatMatchDateTime(match).split(",")[0],
       matches: [match]
     });
     return groups;

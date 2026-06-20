@@ -50,6 +50,7 @@
     "seed:players:api-football": "node scripts/seed-players-api-football.cjs",
     "seed:players:api-football:dry-run": "node scripts/seed-players-api-football.cjs --dry-run",
     "validate:match-rules": "node scripts/validate-match-rules.cjs",
+    "validate:world-cup-times": "node scripts/validate-world-cup-times.cjs",
     "stop:admin": "node scripts/stop-port.cjs 3000",
     "stop:dashboard": "node scripts/stop-port.cjs 3002",
     "stop:mobile": "node scripts/stop-port.cjs 8081",

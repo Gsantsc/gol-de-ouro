@@ -20,7 +20,19 @@ const readJson = async (response) => {
 };
 
 const rest = async (path, options = {}) => readJson(await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...options, headers: { ...headers, ...options.headers } }));
-const normalizeTeam = (value) => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/gi, " ").trim().toLowerCase().replace(/^south korea$/, "korea republic").replace(/^usa$/, "united states");
+const normalizeTeam = (value) => String(value ?? "")
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^a-z0-9]+/gi, " ")
+  .trim()
+  .toLowerCase()
+  .replace(/^cape verde$/, "cabo verde")
+  .replace(/^curacao$/, "curacao")
+  .replace(/^iran$/, "ir iran")
+  .replace(/^ivory coast$/, "cote d ivoire")
+  .replace(/^south korea$/, "korea republic")
+  .replace(/^turkiye$/, "turkey")
+  .replace(/^united states$/, "usa");
 const sameKickoffWindow = (left, right) => Math.abs(new Date(left).getTime() - new Date(right).getTime()) <= 8 * 60 * 60 * 1000;
 const looseKickoffWindow = (left, right) => Math.abs(new Date(left).getTime() - new Date(right).getTime()) <= 36 * 60 * 60 * 1000;
 
@@ -30,6 +42,16 @@ const mapStatus = (status) => {
   if (type?.state === "in") return "ao_vivo";
   return null;
 };
+
+const canonicalTeam = (value) => ({
+  "Cape Verde": "Cabo Verde",
+  "Curaçao": "Curacao",
+  "Iran": "IR Iran",
+  "Ivory Coast": "Cote d'Ivoire",
+  "South Korea": "Korea Republic",
+  "Türkiye": "Turkey",
+  "United States": "USA",
+}[value] ?? value);
 
 const readTeam = (competitors, side) => {
   const item = competitors?.find((competitor) => competitor.homeAway === side);
@@ -124,10 +146,10 @@ const run = async () => {
     const status = event.status ?? match.status;
     const payload = {
       away_score: event.away.score,
-      away_team: event.away.name,
+      away_team: canonicalTeam(event.away.name),
       away_team_logo_url: event.away.logo,
       home_score: event.home.score,
-      home_team: event.home.name,
+      home_team: canonicalTeam(event.home.name),
       home_team_logo_url: event.home.logo,
       last_synced_at: new Date().toISOString(),
       start_time: event.date,

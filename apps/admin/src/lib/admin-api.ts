@@ -49,7 +49,7 @@ const readOptionalResult = <T>(
 
 const getAppBaseUrl = () => {
   if (typeof window !== "undefined" && window.location.origin) return window.location.origin;
-  return process.env.NEXT_PUBLIC_APP_URL ?? "https://goldeouro.app";
+  return process.env.NEXT_PUBLIC_APP_URL ?? "https://gol-de-ouro-app.vercel.app";
 };
 
 export const signInAdmin = async (email: string, password: string) => {

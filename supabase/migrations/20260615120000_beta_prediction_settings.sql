@@ -278,6 +278,7 @@ declare
   target_match public.matches%rowtype;
   elevated boolean :=
     coalesce(auth.role(), '') = 'service_role'
+    or current_user in ('postgres', 'supabase_admin')
     or public.is_admin();
   prediction_changed boolean;
 begin

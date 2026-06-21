@@ -1747,7 +1747,7 @@ const GroupsPanel = ({
               (rankings.find((ranking) => ranking.user_id === right.user_id)?.total_points ?? 0) -
               (rankings.find((ranking) => ranking.user_id === left.user_id)?.total_points ?? 0),
           );
-          const deepLink = `goldeouro://join/group/${group.invite_token}`;
+          const deepLink = `goldeouro://invite/${group.invite_token}`;
           const webLink = group.invite_url;
           return (
             <div className="panel p-5" key={group.id}>

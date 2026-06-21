@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Linking } from "react-native";
 import type { Match } from "../shared";
 import { AuthProvider, useAuth } from "../hooks/useAuth";
@@ -11,6 +12,7 @@ import { ApprovalScreen } from "../screens/ApprovalScreen";
 import { AuthScreen } from "../screens/AuthScreen";
 import { GroupsScreen } from "../screens/GroupsScreen";
 import { HomeScreen } from "../screens/HomeScreen";
+import { InviteScreen } from "../screens/InviteScreen";
 import { MatchDetailsScreen } from "../screens/MatchDetailsScreen";
 import { PredictionScreen } from "../screens/PredictionScreen";
 import { PredictionsScreen } from "../screens/PredictionsScreen";
@@ -18,7 +20,7 @@ import { ProfileScreen } from "../screens/ProfileScreen";
 import { RankingScreen } from "../screens/RankingScreen";
 import { SplashScreen } from "../screens/SplashScreen";
 import { TournamentsScreen } from "../screens/TournamentsScreen";
-import { acceptAppInvite, joinGroupByInvite } from "../services/football.service";
+import { acceptAppInvite, acceptGroupInvite } from "../services/football.service";
 
 type Overlay =
   | { type: "details"; match: Match }
@@ -27,11 +29,56 @@ type Overlay =
 
 type Toast = { message: string; tone: "success" | "error" | "warning" | "info" } | null;
 
+const PENDING_INVITE_STORAGE_KEY = "gol-de-ouro.pendingInviteUrl";
+const SAVED_INVITE_CODE_STORAGE_KEY = "gol-de-ouro.savedPendingInviteCode";
+
+const readPathParts = (url: string) => {
+  try {
+    return new URL(url).pathname.split("/").filter(Boolean);
+  } catch {
+    return url.split(/[?#]/)[0].split("/").filter(Boolean);
+  }
+};
+
+const isAppInviteUrl = (url: string) => readPathParts(url).join("/").includes("invite/app");
+
+const extractGroupInviteCode = (url: string | null) => {
+  if (!url || isAppInviteUrl(url)) return null;
+  const parts = readPathParts(url);
+  const inviteIndex = parts.indexOf("invite");
+  if (inviteIndex >= 0) {
+    const next = parts[inviteIndex + 1];
+    if (next === "group") return parts[inviteIndex + 2] ?? null;
+    return next ?? null;
+  }
+
+  const joinIndex = parts.indexOf("join");
+  if (joinIndex >= 0 && parts[joinIndex + 1] === "group") return parts[joinIndex + 2] ?? null;
+  return null;
+};
+
+const extractGroupRouteId = (url: string | null) => {
+  if (!url) return null;
+  const parts = readPathParts(url);
+  const index = parts.findIndex((part) => part === "ligas" || part === "leagues" || part === "groups");
+  return index >= 0 ? parts[index + 1] ?? null : null;
+};
+
 const AppContent = () => {
-  const { loading: authLoading, profile, session } = useAuth();
+  const {
+    loading: authLoading,
+    profile,
+    refreshProfile,
+    refreshingProfile,
+    session
+  } = useAuth();
   const [activeTab, setActiveTab] = useState<MainTab>("home");
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [pendingInviteUrl, setPendingInviteUrl] = useState<string | null>(null);
+  const [savedPendingInviteCode, setSavedPendingInviteCode] = useState<string | null>(null);
+  const [showAuthForInvite, setShowAuthForInvite] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [acceptingInvite, setAcceptingInvite] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const accessStatus = profile?.status ?? (profile?.blocked ? "suspended" : profile?.approval_status);
   const approvedUserId = accessStatus === "approved" && !profile?.blocked ? profile?.id : undefined;
@@ -51,8 +98,7 @@ const AppContent = () => {
     refresh,
     settings,
     tournaments
-  } =
-    useFootballData(approvedUserId);
+  } = useFootballData(approvedUserId);
   const predictionLockMinutes = settings.prediction_lock_minutes;
 
   const showToast = (message: string, tone: NonNullable<Toast>["tone"] = "info") => {
@@ -69,51 +115,166 @@ const AppContent = () => {
     const index = ranking.findIndex((item) => item.user_id === profile?.id);
     return index >= 0 ? index + 1 : null;
   }, [profile?.id, ranking]);
+
+  const persistPendingInviteUrl = useCallback(async (url: string | null) => {
+    setPendingInviteUrl(url);
+    if (url) {
+      await AsyncStorage.setItem(PENDING_INVITE_STORAGE_KEY, url);
+    } else {
+      await AsyncStorage.removeItem(PENDING_INVITE_STORAGE_KEY);
+      await AsyncStorage.removeItem(SAVED_INVITE_CODE_STORAGE_KEY);
+    }
+  }, []);
+
+  const rememberUrl = useCallback((url: string | null) => {
+    if (!url) return;
+
+    if (url.includes("invite") || url.includes("join")) {
+      persistPendingInviteUrl(url).catch(console.error);
+      setShowAuthForInvite(false);
+      return;
+    }
+
+    const routeGroupId = extractGroupRouteId(url);
+    if (routeGroupId) {
+      setSelectedGroupId(routeGroupId);
+      setActiveTab("groups");
+    }
+  }, [persistPendingInviteUrl]);
+
   useEffect(() => {
-    const rememberInviteUrl = (url: string | null) => {
-      if (url && (url.includes("invite") || url.includes("join"))) setPendingInviteUrl(url);
+    const restorePendingInvite = async () => {
+      const storedInviteUrl = await AsyncStorage.getItem(PENDING_INVITE_STORAGE_KEY);
+      const storedSavedCode = await AsyncStorage.getItem(SAVED_INVITE_CODE_STORAGE_KEY);
+      if (storedInviteUrl) setPendingInviteUrl(storedInviteUrl);
+      if (storedSavedCode) setSavedPendingInviteCode(storedSavedCode);
     };
 
-    Linking.getInitialURL().then(rememberInviteUrl).catch(console.error);
+    restorePendingInvite().catch(console.error);
+    Linking.getInitialURL().then(rememberUrl).catch(console.error);
     const subscription = Linking.addEventListener("url", (event) => {
-      rememberInviteUrl(event.url);
+      rememberUrl(event.url);
     });
 
     return () => subscription.remove();
-  }, []);
+  }, [rememberUrl]);
 
   useEffect(() => {
-    if (!profile || accessStatus !== "approved" || profile.blocked || !pendingInviteUrl) return;
+    if (!profile || accessStatus !== "approved" || profile.blocked || !pendingInviteUrl || !isAppInviteUrl(pendingInviteUrl)) return;
 
-    const handleInviteUrl = async (url: string | null) => {
-      if (!url || (!url.includes("invite") && !url.includes("join"))) return;
+    const handleAppInviteUrl = async (url: string | null) => {
+      if (!url || !isAppInviteUrl(url)) return;
       const invite = url.split("/").filter(Boolean).pop();
       if (!invite) return;
 
       try {
-        if (url.includes("/invite/app/")) {
-          await acceptAppInvite(invite);
-          setPendingInviteUrl(null);
-          showToast("Convite do app confirmado.", "success");
-          return;
-        }
-
-        await joinGroupByInvite(invite);
-        await refresh();
+        await acceptAppInvite(invite);
+        await persistPendingInviteUrl(null);
         setActiveTab("home");
-        setPendingInviteUrl(null);
-        showToast("Convite aceito. Você entrou na liga.", "success");
+        showToast("Convite do app confirmado.", "success");
       } catch (error) {
-        showToast(error instanceof Error ? error.message : "Convite inválido. Tente novamente.", "error");
+        showToast(error instanceof Error ? error.message : "Convite invalido. Tente novamente.", "error");
       }
     };
 
-    handleInviteUrl(pendingInviteUrl).catch(console.error);
-  }, [accessStatus, pendingInviteUrl, profile, refresh]);
+    handleAppInviteUrl(pendingInviteUrl).catch(console.error);
+  }, [accessStatus, pendingInviteUrl, persistPendingInviteUrl, profile]);
+
+  const groupInviteCode = extractGroupInviteCode(pendingInviteUrl);
+
+  const handleGroupInviteAccept = useCallback(async () => {
+    if (!groupInviteCode) return null;
+
+    try {
+      setAcceptingInvite(true);
+      const result = await acceptGroupInvite(groupInviteCode);
+      if (result?.status === "pending_approval") {
+        setSavedPendingInviteCode(groupInviteCode);
+        await AsyncStorage.setItem(PENDING_INVITE_STORAGE_KEY, pendingInviteUrl ?? groupInviteCode);
+        await AsyncStorage.setItem(SAVED_INVITE_CODE_STORAGE_KEY, groupInviteCode);
+        return result;
+      }
+
+      await refresh();
+      await persistPendingInviteUrl(null);
+      await AsyncStorage.removeItem(SAVED_INVITE_CODE_STORAGE_KEY);
+      setSavedPendingInviteCode(null);
+      setSelectedGroupId(result?.group_id ?? null);
+      setActiveTab("groups");
+      showToast(
+        result?.status === "already_member" ? "Voce ja participa desta liga." : "Convite aceito. Voce entrou na liga.",
+        "success"
+      );
+      return result;
+    } finally {
+      setAcceptingInvite(false);
+    }
+  }, [groupInviteCode, pendingInviteUrl, persistPendingInviteUrl, refresh]);
+
+  useEffect(() => {
+    if (accessStatus !== "approved" || !groupInviteCode || savedPendingInviteCode !== groupInviteCode) return;
+
+    handleGroupInviteAccept().catch((error) => {
+      showToast(error instanceof Error ? error.message : "Convite invalido. Tente novamente.", "error");
+    });
+  }, [accessStatus, groupInviteCode, handleGroupInviteAccept, savedPendingInviteCode]);
 
   if (authLoading) return <SplashScreen />;
-  if (!session) return <AuthScreen />;
+  if (!session) {
+    if (groupInviteCode && !showAuthForInvite) {
+      return (
+        <InviteScreen
+          accepting={acceptingInvite}
+          accessStatus="signed_out"
+          inviteCode={groupInviteCode}
+          onAccept={handleGroupInviteAccept}
+          onRequireAuth={() => setShowAuthForInvite(true)}
+        />
+      );
+    }
+
+    return <AuthScreen />;
+  }
   if (!profile) return <SplashScreen />;
+
+  if (groupInviteCode && accessStatus !== "approved" && !profile.blocked) {
+    return (
+      <InviteScreen
+        accepting={acceptingInvite}
+        accessStatus={accessStatus === "pending" ? "pending" : "rejected"}
+        inviteCode={groupInviteCode}
+        onAccept={handleGroupInviteAccept}
+        onRequireAuth={() => setShowAuthForInvite(true)}
+        onVerifyApproval={refreshProfile}
+        refreshingProfile={refreshingProfile}
+      />
+    );
+  }
+
+  if (groupInviteCode && profile.blocked) {
+    return (
+      <InviteScreen
+        accepting={acceptingInvite}
+        accessStatus="suspended"
+        inviteCode={groupInviteCode}
+        onAccept={handleGroupInviteAccept}
+        onRequireAuth={() => setShowAuthForInvite(true)}
+      />
+    );
+  }
+
+  if (groupInviteCode && accessStatus === "approved" && !profile.blocked) {
+    return (
+      <InviteScreen
+        accepting={acceptingInvite}
+        accessStatus="approved"
+        inviteCode={groupInviteCode}
+        onAccept={handleGroupInviteAccept}
+        onRequireAuth={() => setShowAuthForInvite(true)}
+      />
+    );
+  }
+
   if (accessStatus !== "approved" || profile.blocked) {
     return <ApprovalScreen />;
   }
@@ -205,8 +366,10 @@ const AppContent = () => {
         <ScreenScroll>
           <GroupsScreen
             groups={groups}
+            initialSelectedGroupId={selectedGroupId}
             members={groupMembers}
             onRefresh={refresh}
+            onSelectGroup={setSelectedGroupId}
             rankings={ranking}
             tournaments={tournaments}
             userId={profile.id}

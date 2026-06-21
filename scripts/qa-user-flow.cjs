@@ -354,7 +354,7 @@ const runScenario = async () => {
     originalGroupInvite,
     regenerated: regeneratedGroup.invite_token,
   });
-  assert(regeneratedGroup.invite_url.includes("/join/group/"), "URL de grupo nao usa fluxo /join/group.", regeneratedGroup);
+  assert(regeneratedGroup.invite_url.includes("/invite/"), "URL de grupo nao usa fluxo /invite/:token.", regeneratedGroup);
 
   let oldGroupInviteRejected = false;
   try {
@@ -485,7 +485,7 @@ const runScenario = async () => {
       method: "PATCH",
     }, users[0].accessToken);
   } catch (error) {
-    editAfterCloseRejected = /janela|Palpites encerram|fechada/i.test(error.message);
+    editAfterCloseRejected = /janela|Palpites encerrad|Palpites encerram|fechada/i.test(error.message);
   }
 
   await rest(`matches?id=eq.${match.id}`, {

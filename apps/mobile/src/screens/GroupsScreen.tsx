@@ -19,15 +19,19 @@ import { colors, radius, spacing } from "../theme/tokens";
 
 export const GroupsScreen = ({
   groups,
+  initialSelectedGroupId,
   members,
   onRefresh,
+  onSelectGroup,
   rankings,
   tournaments,
   userId
 }: {
   groups: Group[];
+  initialSelectedGroupId?: string | null;
   members: GroupMember[];
   onRefresh: () => Promise<void>;
+  onSelectGroup?: (groupId: string | null) => void;
   rankings: Ranking[];
   tournaments: Tournament[];
   userId: string;
@@ -41,6 +45,10 @@ export const GroupsScreen = ({
   useEffect(() => {
     if (!championshipId && tournaments[0]?.id) setChampionshipId(tournaments[0].id);
   }, [championshipId, tournaments]);
+
+  useEffect(() => {
+    if (initialSelectedGroupId) setSelectedGroupId(initialSelectedGroupId);
+  }, [initialSelectedGroupId]);
 
   const run = async (action: () => Promise<void>, success?: string) => {
     if (busy) return;
@@ -57,12 +65,28 @@ export const GroupsScreen = ({
     }
   };
   const inviteLinkFor = (group: Group) =>
-    group.invite_url || `https://goldeouro.app/invite/group/${group.invite_token || group.invite_code}`;
+    group.invite_url || `https://gol-de-ouro-app.vercel.app/invite/${group.invite_token || group.invite_code}`;
+
+  const selectGroup = (groupId: string | null) => {
+    setSelectedGroupId(groupId);
+    onSelectGroup?.(groupId);
+  };
+
+  const copyInviteLink = async (link: string) => {
+    const clipboard = globalThis.navigator?.clipboard;
+    if (clipboard?.writeText) {
+      await clipboard.writeText(link);
+      setToast({ message: "Link copiado.", tone: "success" });
+      return;
+    }
+
+    await Share.share({ message: link });
+  };
 
   return (
     <>
       {toast ? <ToastBanner message={toast.message} tone={toast.tone} /> : null}
-      <SectionTitle title="Criar liga" />
+      <SectionTitle title="Criar nova liga" />
       <Card>
         <View style={styles.form}>
           <Field label="Nome da liga" onChangeText={setGroupName} placeholder="Liga entre amigos" value={groupName} />
@@ -103,7 +127,7 @@ export const GroupsScreen = ({
         const myPosition = rankedMembers.findIndex((member) => member.user_id === userId);
         const myPoints = rankings.find((ranking) => ranking.user_id === userId)?.total_points ?? 0;
         const inviteToken = group.invite_token || group.invite_code;
-        const deepLink = `goldeouro://join/group/${inviteToken}`;
+        const deepLink = `goldeouro://invite/${inviteToken}`;
         const webLink = inviteLinkFor(group);
 
         return (
@@ -132,8 +156,8 @@ export const GroupsScreen = ({
               </View>
             </View>
             <AppButton
-              onPress={() => setSelectedGroupId(group.id)}
-              title={selected ? "Detalhes abertos" : "Entrar"}
+              onPress={() => selectGroup(selected ? null : group.id)}
+              title={selected ? "Fechar detalhes" : "Abrir liga"}
             />
             {selected ? (
               <>
@@ -149,6 +173,12 @@ export const GroupsScreen = ({
                 icon={<Share2 color={colors.black} size={18} />}
                 onPress={() => Share.share({ message: `${group.name}: ${deepLink}\n${webLink}` })}
                 title="Compartilhar"
+              />
+              <AppButton
+                icon={<Copy color={colors.text} size={18} />}
+                onPress={() => copyInviteLink(webLink)}
+                title="Copiar link"
+                variant="ghost"
               />
               {isOwner ? (
                 <>
@@ -203,6 +233,61 @@ export const GroupsScreen = ({
           </Card>
         );
       })}
+
+      <SectionTitle title="Convites" />
+      {groups.map((group) => {
+        const isOwner = group.owner_id === userId;
+        const inviteToken = group.invite_token || group.invite_code;
+        const deepLink = `goldeouro://invite/${inviteToken}`;
+        const webLink = inviteLinkFor(group);
+
+        return (
+          <Card key={`invite-${group.id}`} variant="soft">
+            <View style={styles.inviteCardHeader}>
+              <View style={styles.groupInfo}>
+                <Text style={styles.groupName}>{group.name}</Text>
+                <Text style={styles.groupMeta}>
+                  Link exclusivo: {group.invite_active ? "ativo" : "inativo"}
+                </Text>
+              </View>
+              {webLink ? <MiniQr value={webLink} /> : null}
+            </View>
+            <View style={styles.invitePanel}>
+              <Text style={styles.link}>{webLink}</Text>
+              <Text style={styles.link}>{deepLink}</Text>
+            </View>
+            <View style={styles.actions}>
+              <AppButton
+                icon={<Share2 color={colors.black} size={18} />}
+                onPress={() => Share.share({ message: `${group.name}: ${deepLink}\n${webLink}` })}
+                title="Compartilhar"
+              />
+              <AppButton
+                icon={<Copy color={colors.text} size={18} />}
+                onPress={() => copyInviteLink(webLink)}
+                title="Copiar link"
+                variant="ghost"
+              />
+              {isOwner ? (
+                <>
+                  <AppButton
+                    loading={busy}
+                    onPress={() => run(() => regenerateGroupInvite(group.id), "Link regenerado.")}
+                    title="Regenerar"
+                    variant="ghost"
+                  />
+                  <AppButton
+                    loading={busy}
+                    onPress={() => run(() => deactivateGroupInvite(group.id), "Link desativado.")}
+                    title="Desativar"
+                    variant="ghost"
+                  />
+                </>
+              ) : null}
+            </View>
+          </Card>
+        );
+      })}
       {!groups.length && (
         <Card>
           <Text style={styles.muted}>Você ainda não participa de ligas.</Text>
@@ -220,7 +305,7 @@ export const GroupsScreen = ({
 };
 
 const MiniQr = ({ value }: { value: string }) => {
-  const matrix = createQrMatrix(value || "https://goldeouro.app");
+  const matrix = createQrMatrix(value || "https://gol-de-ouro-app.vercel.app");
   const size = matrix.length;
 
   return (
@@ -240,6 +325,7 @@ const MiniQr = ({ value }: { value: string }) => {
 const styles = StyleSheet.create({
   actions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm,
     marginVertical: spacing.md
   },
@@ -315,6 +401,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginTop: spacing.md,
     padding: spacing.sm
+  },
+  inviteCardHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between"
   },
   inviteStatus: {
     color: colors.text,

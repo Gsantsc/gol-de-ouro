@@ -9,6 +9,8 @@ import type {
   Ranking,
   Tournament,
   Group,
+  GroupInviteAcceptResult,
+  GroupInvitePreview,
   GroupMember,
   Achievement,
   AppSettings,
@@ -83,7 +85,7 @@ const predictionSubmitMessage = (error: unknown) => {
 
 const getAppBaseUrl = () => {
   const origin = typeof globalThis.location !== "undefined" ? globalThis.location.origin : "";
-  return origin || "https://goldeouro.app";
+  return origin || "https://gol-de-ouro-app.vercel.app";
 };
 
 const loadPublicProfiles = () => {
@@ -347,6 +349,18 @@ export const createGroup = async (name: string, championshipId: string) => {
 export const joinGroupByInvite = async (invite: string) => {
   const { error } = await supabase.rpc("join_group_by_invite", { invite });
   if (error) throw error;
+};
+
+export const getGroupInvitePreview = async (invite: string) => {
+  const { data, error } = await supabase.rpc("get_group_invite_preview", { invite });
+  if (error) throw error;
+  return ((data ?? [])[0] ?? null) as GroupInvitePreview | null;
+};
+
+export const acceptGroupInvite = async (invite: string) => {
+  const { data, error } = await supabase.rpc("accept_group_invite", { invite });
+  if (error) throw error;
+  return ((data ?? [])[0] ?? null) as GroupInviteAcceptResult | null;
 };
 
 export const leaveGroup = async (groupId: string) => {

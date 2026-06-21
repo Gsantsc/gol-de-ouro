@@ -228,10 +228,30 @@ export type GroupInvite = {
   invite_token?: string | null;
   invite_url?: string | null;
   invite_active?: boolean;
+  max_uses?: number | null;
+  used_count?: number;
   created_by: string;
   created_at: string;
   expires_at: string | null;
   revoked_at: string | null;
+};
+
+export type GroupInvitePreview = {
+  group_id: string;
+  group_name: string;
+  championship_id: string;
+  championship_name: string;
+  participant_count: number;
+  invite_token: string;
+  invite_url: string;
+  invite_active: boolean;
+};
+
+export type GroupInviteAcceptResult = {
+  status: "joined" | "already_member" | "pending_approval";
+  group_id: string;
+  group_name: string;
+  membership_created: boolean;
 };
 
 export type AppInvite = {

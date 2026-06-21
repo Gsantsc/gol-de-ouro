@@ -49,6 +49,7 @@
     "seed:players:wc2026:dry-run": "node scripts/seed-players-world-cup-2026.cjs --dry-run",
     "seed:players:api-football": "node scripts/seed-players-api-football.cjs",
     "seed:players:api-football:dry-run": "node scripts/seed-players-api-football.cjs --dry-run",
+    "validate:group-invites": "node scripts/validate-group-invites.cjs",
     "validate:match-rules": "node scripts/validate-match-rules.cjs",
     "validate:world-cup-times": "node scripts/validate-world-cup-times.cjs",
     "stop:admin": "node scripts/stop-port.cjs 3000",

@@ -120,7 +120,7 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 const getAppBaseUrl = () => {
   if (typeof window !== "undefined" && window.location.origin) return window.location.origin;
-  return process.env.NEXT_PUBLIC_APP_URL ?? "https://goldeouro.app";
+  return process.env.NEXT_PUBLIC_APP_URL ?? "https://gol-de-ouro-app.vercel.app";
 };
 
 const normalizeProfile = (profile: Profile | null): Profile | null => {

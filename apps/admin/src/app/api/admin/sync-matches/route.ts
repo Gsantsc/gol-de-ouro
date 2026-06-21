@@ -71,7 +71,7 @@ const logSync = (message: string, level: "info" | "error" | "warn" = "info") => 
 };
 
 const readProviderStatNumber = (stats: ProviderMatchStats, key: string) => {
-  const value = stats[key as any];
+  const value = (stats as Record<string, unknown>)[key];
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
     const parsed = Number(value);
@@ -81,7 +81,7 @@ const readProviderStatNumber = (stats: ProviderMatchStats, key: string) => {
 };
 
 const readProviderStatString = (stats: ProviderMatchStats, key: string) => {
-  const value = stats[key as any];
+  const value = (stats as Record<string, unknown>)[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
 };
 

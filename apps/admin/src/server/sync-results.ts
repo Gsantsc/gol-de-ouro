@@ -118,9 +118,17 @@ export type LiveResultsSyncSummary = {
   scoredPredictions: number;
   startedAt: string;
   standingsUpdated: number;
-  status: "success" | "failed";
+  status: "success" | "partial_success" | "failed";
   triggeredBy: string;
   updatedMatches: number;
+};
+
+// SYNC STATUS CLASSIFICATION - Classify sync status based on errors and updates
+const classifySyncStatus = (errors: string[], updatedMatches: number, checkedMatches: number): "success" | "partial_success" | "failed" => {
+  if (errors.length === 0) return "success";
+  // If there were updates despite errors, it's partial success, not total failure
+  if (updatedMatches > 0 || checkedMatches > 0) return "partial_success";
+  return "failed";
 };
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -161,6 +169,27 @@ const readNumber = (value: unknown) => {
 };
 
 const readString = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : null);
+
+// SYNC ERROR SERIALIZATION - Robust error serialization to avoid [object Object]
+const serializeSyncError = (error: unknown): string => {
+  if (error instanceof Error) {
+    // Include stack trace in development for debugging
+    const stack = process.env.NODE_ENV === "development" && error.stack ? ` (${error.stack.split("\n")[0]})` : "";
+    return `${error.message}${stack}`;
+  }
+  if (typeof error === "string") return error;
+  if (error === null || error === undefined) return "";
+  if (Array.isArray(error)) {
+    return error.map((item) => serializeSyncError(item)).filter(Boolean).join(" | ");
+  }
+  try {
+    const stringified = JSON.stringify(error);
+    if (stringified === "{}" || stringified === "[]") return String(error);
+    return stringified;
+  } catch {
+    return String(error);
+  }
+};
 
 const normalizeTeam = (value: string) =>
   value
@@ -414,7 +443,7 @@ const fetchProviderEvents = async (matches: MatchRow[], now: Date, providerName:
     try {
       events.push(...await provider.fetchScoreboard(date));
     } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
+      errors.push(serializeSyncError(error));
     }
   }
 
@@ -788,17 +817,24 @@ const updateKnockoutMatches = async (
 
 // SYNC RUN LOGS
 const logSyncRun = async (supabase: SupabaseClient, summary: LiveResultsSyncSummary) => {
+  const status = classifySyncStatus(summary.errors, summary.updatedMatches, summary.checkedMatches);
   const message = [
-    `Auto sync ${summary.status}`,
+    `Auto sync ${status}`,
     `${summary.checkedMatches} checked`,
     `${summary.updatedMatches} updated`,
     `${summary.finishedMatches} finished`,
-    `${summary.scoredPredictions} predictions scored`,
+    `${summary.scoredPredictions} predictions scored`
   ].join("; ");
+
+  // Ensure all errors are serialized strings
+  const serializedErrors = summary.errors.map((error) => 
+    typeof error === "string" ? error : serializeSyncError(error)
+  );
+  const errorsText = serializedErrors.join(" | ").slice(0, 2000);
 
   const extendedPayload = {
     checked_matches: summary.checkedMatches,
-    error_message: summary.errors.length ? summary.errors.join(" | ").slice(0, 2000) : null,
+    error_message: serializedErrors.length ? errorsText : null,
     finished_at: summary.finishedAt,
     finished_matches: summary.finishedMatches,
     inserted_count: 0,
@@ -810,7 +846,7 @@ const logSyncRun = async (supabase: SupabaseClient, summary: LiveResultsSyncSumm
     scored_predictions: summary.scoredPredictions,
     standings_updated: summary.standingsUpdated,
     started_at: summary.startedAt,
-    status: summary.status,
+    status,
     triggered_by: summary.triggeredBy,
     updated_count: summary.updatedMatches,
     updated_matches: summary.updatedMatches,
@@ -821,10 +857,13 @@ const logSyncRun = async (supabase: SupabaseClient, summary: LiveResultsSyncSumm
 
   await supabase.from("match_provider_runs").insert({
     inserted_count: 0,
-    message: `${message}${summary.errors.length ? `; errors: ${summary.errors.join(" | ").slice(0, 1000)}` : ""}`,
+    message: `${message}${serializedErrors.length ? `; errors: ${serializedErrors.join(" | ").slice(0, 1000)}` : ""}`,
     provider_name: summary.provider,
-    status: summary.status,
+    status,
     updated_count: summary.updatedMatches,
+    checked_matches: summary.checkedMatches,
+    finished_matches: summary.finishedMatches,
+    scored_predictions: summary.scoredPredictions,
   });
 };
 
@@ -879,7 +918,7 @@ export const runLiveResultsSync = async ({
     liveMatches = allMatches.filter((match) => match.status === "ao_vivo").length;
     finishedMatches = allMatches.filter((match) => match.status === "encerrado").length;
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : String(error));
+    errors.push(serializeSyncError(error));
   }
 
   const summary: LiveResultsSyncSummary = {
@@ -895,7 +934,7 @@ export const runLiveResultsSync = async ({
     scoredPredictions,
     startedAt: startedAt.toISOString(),
     standingsUpdated,
-    status: errors.length ? "failed" : "success",
+    status: classifySyncStatus(errors, updatedMatches, checkedMatches),
     triggeredBy,
     updatedMatches,
   };

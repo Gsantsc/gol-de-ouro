@@ -1103,9 +1103,15 @@ const MatchesPanel = ({
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs font-black text-white/55">
                     <span>{run.checked_matches ?? 0} consultados</span>
-                    <span>{run.updated_matches ?? run.updated_count} atualizados</span>
-                    <span>{run.scored_predictions ?? 0} palpites</span>
+                    <span>{run.updated_matches ?? run.updated_count ?? 0} atualizados</span>
+                    <span>{run.finished_matches ?? 0} encerrados</span>
+                    <span>{run.scored_predictions ?? 0} palpites pontuados</span>
                   </div>
+                  {run.error_message && (
+                    <div className="mt-2 rounded-md border border-red-400/20 bg-red-500/5 p-2 text-xs font-bold leading-5 text-red-200">
+                      {typeof run.error_message === "string" ? run.error_message : JSON.stringify(run.error_message)}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

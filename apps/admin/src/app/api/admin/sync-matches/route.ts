@@ -70,6 +70,30 @@ const logSync = (message: string, level: "info" | "error" | "warn" = "info") => 
   else console.log(`${prefix} ${message}`);
 };
 
+const readProviderStatNumber = (stats: ProviderMatchStats, key: string) => {
+  const value = stats[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const readProviderStatString = (stats: ProviderMatchStats, key: string) => {
+  const value = stats[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+};
+
+const legacyStaticExternalIds = (matchNumber: number | null) => {
+  if (!matchNumber) return [];
+  const padded = String(matchNumber).padStart(3, "0");
+  const legacy = [`static-wc2026-${padded}`];
+  if (matchNumber === 1) legacy.push("static-wc2026-mexico-south-africa");
+  if (matchNumber === 2) legacy.push("static-wc2026-korea-republic-czechia");
+  return legacy;
+};
+
 const createSupabaseForRequest = (accessToken: string) =>
   createClient(requiredEnv("NEXT_PUBLIC_SUPABASE_URL"), requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"), {
     auth: {
@@ -152,6 +176,52 @@ const statsPayload = (matchId: string, stats: ProviderMatchStats) => ({
   yellow_cards_away: stats.yellowCardsAway,
   yellow_cards_home: stats.yellowCardsHome,
 });
+
+const findExistingProviderMatch = async (
+  supabase: SupabaseClient,
+  providerName: string,
+  providerMatch: ProviderMatch,
+) => {
+  const exact = await supabase
+    .from("matches")
+    .select("id,status,provider_external_id,stats")
+    .eq("provider_name", providerName)
+    .eq("provider_external_id", providerMatch.externalId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (exact.error) {
+    logSync(`UPSERT ERROR: Failed to check existing match - ${exact.error.message}`, "error");
+    throw exact.error;
+  }
+  if (exact.data) return exact.data;
+
+  if (providerName !== "static-wc2026" || providerMatch.championship !== "world_cup_2026") {
+    return null;
+  }
+
+  const matchNumber = readProviderStatNumber(providerMatch.stats, "match_number");
+  const legacyIds = legacyStaticExternalIds(matchNumber);
+  if (!matchNumber && legacyIds.length === 0) return null;
+
+  const candidates = await supabase
+    .from("matches")
+    .select("id,status,provider_external_id,stats")
+    .eq("provider_name", providerName)
+    .eq("championship", providerMatch.championship)
+    .is("deleted_at", null);
+
+  if (candidates.error) {
+    logSync(`UPSERT ERROR: Failed to check legacy static match - ${candidates.error.message}`, "error");
+    throw candidates.error;
+  }
+
+  return (candidates.data ?? []).find((match) => {
+    const stats = (match.stats ?? {}) as ProviderMatchStats;
+    const existingNumber = readProviderStatNumber(stats, "match_number");
+    return existingNumber === matchNumber || legacyIds.includes(String(match.provider_external_id ?? ""));
+  }) ?? null;
+};
 
 // API-FOOTBALL INTEGRATION
 // Sync teams from API-Football and link to matches
@@ -280,6 +350,10 @@ const upsertProviderMatch = async (
     status: providerStatus
   }, new Date(), predictionLockMinutes);
 
+  const richStats = providerMatch.stats;
+  const kickoffUtc = readProviderStatString(richStats, "kickoff_utc") ?? providerMatch.kickoff;
+  const venueTimezone = readProviderStatString(richStats, "venue_timezone");
+
   // FIX MATCH UPSERT - Payload includes all required fields: provider_name, provider_external_id, championship, last_synced_at, home_team, away_team, logos, start_time, status
   const payload = {
     away_score: providerMatch.awayScore,
@@ -298,23 +372,18 @@ const upsertProviderMatch = async (
     round: providerMatch.round,
     stadium: providerMatch.stadium,
     start_time: providerMatch.kickoff,
+    start_time_utc: kickoffUtc,
+    venue_timezone: venueTimezone,
+    source_timezone: venueTimezone,
+    kickoff_source: readProviderStatString(richStats, "source"),
+    kickoff_verified_at: new Date().toISOString(),
+    display_time_br: readProviderStatString(richStats, "kickoff_brt"),
     stats: providerMatch.stats,
     status,
     tournament_id: tournamentId,
   };
 
-  const { data: existing, error: existingError } = await supabase
-    .from("matches")
-    .select("id,status")
-    .eq("provider_name", providerName)
-    .eq("provider_external_id", providerMatch.externalId)
-    .maybeSingle();
-
-  if (existingError) {
-    // UPSERT FIX - Log upsert error
-    logSync(`UPSERT ERROR: Failed to check existing match - ${existingError.message}`, "error");
-    throw existingError;
-  }
+  const existing = await findExistingProviderMatch(supabase, providerName, providerMatch);
 
   const matchResult = existing
     ? await supabase.from("matches").update(payload).eq("id", existing.id).select("id").single()
@@ -427,9 +496,16 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary> => {
         ? "wc2026"
         : process.env.MATCHES_FALLBACK_PROVIDER === "static-wc2026"
           ? "static-wc2026"
-          : "local-fixtures",
+          : "static-wc2026",
     includeDetails: process.env.API_FOOTBALL_INCLUDE_DETAILS !== "false",
-    providerName: process.env.MATCHES_PROVIDER === "wc2026" ? "wc2026" : process.env.MATCHES_PROVIDER === "api-football" ? "api-football" : "local-fixtures",
+    providerName:
+      process.env.MATCHES_PROVIDER === "wc2026"
+        ? "wc2026"
+        : process.env.MATCHES_PROVIDER === "api-football"
+          ? "api-football"
+          : process.env.MATCHES_PROVIDER === "local-fixtures"
+            ? "local-fixtures"
+            : "static-wc2026",
     season: process.env.API_FOOTBALL_SEASON ? Number(process.env.API_FOOTBALL_SEASON) : 2025,
     seasonByChampionship,
     timezone: process.env.MATCHES_PROVIDER_TIMEZONE ?? "America/Sao_Paulo",
@@ -478,12 +554,20 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary> => {
 
   logSync(`SYNC FIXTURES COMPLETE: ${insertedCount} inserted, ${updatedCount} updated`);
 
+  const runMessage =
+    provider.name === "local-fixtures"
+      ? insertedCount === 0 && updatedCount === 0
+        ? "Sincronizacao local executada sem alteracoes (dataset da Copa 2026 ja esta sincronizado)."
+        : "Sincronizacao local concluida usando dataset da Copa 2026."
+      : provider.name === "static-wc2026"
+        ? "Sincronizacao Copa 2026 concluida com agenda estatica ESPN/FIFA validada."
+        : provider.name === "wc2026"
+          ? "Sincronizacao WC2026 concluida."
+          : `Sincronizacao API-Football concluida. ${teamsSynced} times sincronizados.`;
+
   const logResult = await supabase.from("match_provider_runs").insert({
     inserted_count: insertedCount,
-    message:
-      provider.name === "local-fixtures"
-        ? "Sincronização local concluída. Configure MATCHES_PROVIDER=api-football e API_FOOTBALL_KEY para dados reais."
-        : `Sincronização API-Football concluída. ${teamsSynced} times sincronizados.`,
+    message: runMessage,
     provider_name: provider.name,
     status: "success",
     updated_count: updatedCount,

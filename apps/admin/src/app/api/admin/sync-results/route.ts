@@ -76,7 +76,22 @@ export async function POST(request: NextRequest) {
       triggeredBy,
     });
 
-    return NextResponse.json(summary, { status: summary.status === "success" ? 200 : 500 });
+    const response = {
+      success: summary.status === "success" || summary.status === "partial_success",
+      status: summary.status,
+      summary: {
+        checkedMatches: summary.checkedMatches,
+        updatedMatches: summary.updatedMatches,
+        finishedMatches: summary.finishedMatches,
+        scoredPredictions: summary.scoredPredictions,
+        errorsCount: summary.errors.length
+      },
+      errors: summary.errors.map((error) => ({
+        message: error
+      }))
+    };
+
+    return NextResponse.json(response, { status: response.success ? 200 : 500 });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Erro ao atualizar resultados." },

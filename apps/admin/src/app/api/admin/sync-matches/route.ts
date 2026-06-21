@@ -566,6 +566,7 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary> => {
           : `Sincronizacao API-Football concluida. ${teamsSynced} times sincronizados.`;
 
   const logResult = await supabase.from("match_provider_runs").insert({
+    checked_matches: providerMatches.length,
     inserted_count: insertedCount,
     message: runMessage,
     provider_name: provider.name,

@@ -1064,24 +1064,24 @@ const MatchesPanel = ({
               <div>
                 <p className="text-sm font-black uppercase tracking-normal text-gold">Ultima atualizacao de resultados</p>
                 <p className="mt-1 text-xs text-white/55">
-                  Provider {lastResultsSyncSummary.provider} - {new Date(lastResultsSyncSummary.finishedAt).toLocaleString("pt-BR")}
+                  Provider {lastResultsSyncSummary.provider} - {lastResultsSyncSummary.finishedAt ? new Date(lastResultsSyncSummary.finishedAt).toLocaleString("pt-BR") : "Data não disponível"}
                 </p>
               </div>
-              <span className={`badge ${lastResultsSyncSummary.status === "success" ? "badge-gold" : "border-red-400/40 bg-red-500/10 text-red-100"}`}>
-                {lastResultsSyncSummary.status === "success" ? "ok" : "erro"}
+              <span className={`badge ${lastResultsSyncSummary.status === "success" || lastResultsSyncSummary.status === "partial_success" ? "badge-gold" : "border-red-400/40 bg-red-500/10 text-red-100"}`}>
+                {lastResultsSyncSummary.status === "success" ? "ok" : lastResultsSyncSummary.status === "partial_success" ? "parcial" : "erro"}
               </span>
             </div>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {syncSummaryItems.map((item) => (
                 <div className="rounded-md border border-white/10 bg-white/[0.03] p-3" key={item.label}>
-                  <p className="text-lg font-black text-white">{item.value}</p>
+                  <p className="text-lg font-black text-white">{item.value ?? 0}</p>
                   <p className="mt-1 text-xs font-bold text-white/50">{item.label}</p>
                 </div>
               ))}
             </div>
             {lastResultsSyncSummary.errors.length > 0 && (
               <div className="mt-3 rounded-md border border-red-400/30 bg-red-500/10 p-3 text-xs font-bold leading-5 text-red-100">
-                {lastResultsSyncSummary.errors.join(" | ")}
+                {lastResultsSyncSummary.errors.map((error) => typeof error === "string" ? error : JSON.stringify(error)).join(" | ")}
               </div>
             )}
           </div>

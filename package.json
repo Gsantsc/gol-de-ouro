@@ -52,6 +52,7 @@
     "validate:group-invites": "node scripts/validate-group-invites.cjs",
     "validate:match-rules": "node scripts/validate-match-rules.cjs",
     "validate:match-statuses": "node scripts/validate-match-statuses.cjs",
+    "validate:players:wc2026": "node scripts/validate-wc2026-players.cjs",
     "validate:predictions-display": "node scripts/validate-user-predictions-display.cjs",
     "validate:recalculate-predictions": "node scripts/validate-recalculate-predictions.cjs",
     "validate:sync-upsert-dedupe": "node scripts/validate-sync-upsert-dedupe.cjs",

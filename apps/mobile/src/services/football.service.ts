@@ -20,7 +20,7 @@ import type {
   Player
 } from "../shared";
 import Constants from "expo-constants";
-import { sortRankings } from "../shared";
+import { sortRankings, enrichMatchFlagUrls } from "../shared";
 import { supabase } from "./supabase";
 
 type PublicUserProfile = {
@@ -122,7 +122,7 @@ export const listMatches = async (tournamentId?: string) => {
 
   const { data, error } = await query;
   if (error) throw error;
-  return (data ?? []) as Match[];
+  return ((data ?? []) as Match[]).map(enrichMatchFlagUrls);
 };
 
 export const getAppSettings = async () => {

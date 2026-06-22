@@ -12,6 +12,7 @@ import {
   getTeamDisplayName
 } from "../shared";
 import { Card, EmptyState, MetricTile, Pill, ScreenScroll, SectionTitle } from "../components/ui";
+import { TeamFlag } from "../components/TeamFlag";
 import { colors, radius, spacing } from "../theme/tokens";
 
 const winnerLabel = (winner?: PredictionWinner | null, match?: Match | null) => {
@@ -120,11 +121,17 @@ export const PredictionsScreen = ({
                     return (
                       <View key={prediction.id} style={styles.row}>
                         <View style={styles.content}>
-                          <Text numberOfLines={2} style={styles.match}>
-                            {match
-                              ? formatMatchupDisplayName(match.home_team, match.away_team)
-                              : "Partida indisponivel"}
-                          </Text>
+                          {match ? (
+                            <View style={styles.matchRow}>
+                              <TeamFlag logoUrl={match.home_team_logo_url} name={match.home_team} size={22} />
+                              <Text numberOfLines={2} style={styles.match}>
+                                {formatMatchupDisplayName(match.home_team, match.away_team)}
+                              </Text>
+                              <TeamFlag logoUrl={match.away_team_logo_url} name={match.away_team} size={22} />
+                            </View>
+                          ) : (
+                            <Text numberOfLines={2} style={styles.match}>Partida indisponivel</Text>
+                          )}
                           <Text style={styles.date}>{safeFormatDateTime(matchDate)}</Text>
                           <View style={styles.status}>
                             <Pill tone={statusTone}>{statusLabel}</Pill>
@@ -207,8 +214,14 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0
   },
+  matchRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.xs
+  },
   match: {
     color: colors.text,
+    flex: 1,
     fontSize: 15,
     fontWeight: "900"
   },

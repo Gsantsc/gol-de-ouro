@@ -12,6 +12,7 @@ import {
   predictionOutcome
 } from "../shared";
 import { AppButton, Card, IconButton, Screen, Subtitle, Title, ToastBanner } from "../components/ui";
+import { TeamFlag } from "../components/TeamFlag";
 import { useAuth } from "../hooks/useAuth";
 import { submitPrediction } from "../services/football.service";
 import { colors, radius, spacing } from "../theme/tokens";
@@ -157,15 +158,19 @@ export const PredictionScreen = ({
             <View style={styles.scoreInput}>
               <Stepper
                 label={homeTeamName}
+                logoUrl={match.home_team_logo_url}
                 onDec={() => setHomeScore((value) => clampPredictionScore(value - 1))}
                 onInc={() => setHomeScore((value) => clampPredictionScore(value + 1))}
+                teamName={match.home_team}
                 value={homeScore}
               />
               <Text style={styles.vs}>x</Text>
               <Stepper
                 label={awayTeamName}
+                logoUrl={match.away_team_logo_url}
                 onDec={() => setAwayScore((value) => clampPredictionScore(value - 1))}
                 onInc={() => setAwayScore((value) => clampPredictionScore(value + 1))}
+                teamName={match.away_team}
                 value={awayScore}
               />
             </View>
@@ -240,17 +245,24 @@ export const PredictionScreen = ({
 
 const Stepper = ({
   label,
+  logoUrl,
+  teamName,
   value,
   onDec,
   onInc
 }: {
   label: string;
+  logoUrl?: string | null;
+  teamName: string;
   value: number;
   onDec: () => void;
   onInc: () => void;
 }) => (
   <View style={styles.teamSection}>
-    <Text numberOfLines={2} style={styles.teamName}>{label}</Text>
+    <View style={styles.teamHeading}>
+      <TeamFlag logoUrl={logoUrl} name={teamName} size={30} />
+      <Text numberOfLines={2} style={styles.teamName}>{label}</Text>
+    </View>
     <View style={styles.scoreControls}>
       <IconButton label={`Diminuir ${label}`} onPress={onDec}>
         <Minus color={colors.text} size={18} />
@@ -487,6 +499,10 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: spacing.sm,
     padding: spacing.sm
+  },
+  teamHeading: {
+    alignItems: "center",
+    gap: spacing.xs
   },
   teamName: {
     color: colors.text,

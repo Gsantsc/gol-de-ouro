@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { ArrowLeft, EyeOff } from "lucide-react-native";
 import type { Match, Prediction } from "../shared";
 import { EVENT_LABELS, formatFullDatePtBr, getTeamDisplayName, MATCH_STATUS_LABELS } from "../shared";
+import { TeamFlag } from "../components/TeamFlag";
 import { StatGrid } from "../components/StatGrid";
 import { useMatchDetails } from "../hooks/useMatchDetails";
 import { AppButton, Card, Pill, Screen, SectionTitle, Subtitle, Title } from "../components/ui";
@@ -38,13 +39,19 @@ export const MatchDetailsScreen = ({
           <Text style={styles.date}>{formatFullDatePtBr(match.start_time)}</Text>
         </View>
         <View style={styles.scoreLine}>
-          <Text style={styles.team}>{getTeamDisplayName(match.home_team)}</Text>
+          <View style={styles.teamSide}>
+            <TeamFlag logoUrl={match.home_team_logo_url} name={match.home_team} size={34} />
+            <Text style={styles.team}>{getTeamDisplayName(match.home_team)}</Text>
+          </View>
           <View style={styles.scoreBox}>
             <Text style={styles.score}>{match.home_score}</Text>
             <Text style={styles.scoreMuted}>x</Text>
             <Text style={styles.score}>{match.away_score}</Text>
           </View>
-          <Text style={[styles.team, styles.teamRight]}>{getTeamDisplayName(match.away_team)}</Text>
+          <View style={[styles.teamSide, styles.teamSideRight]}>
+            <TeamFlag logoUrl={match.away_team_logo_url} name={match.away_team} size={34} />
+            <Text style={[styles.team, styles.teamRight]}>{getTeamDisplayName(match.away_team)}</Text>
+          </View>
         </View>
         {myPrediction ? (
           <View style={styles.mineBox}>
@@ -120,11 +127,19 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginVertical: spacing.lg
   },
+  teamSide: {
+    alignItems: "center",
+    flex: 1,
+    gap: spacing.xs
+  },
+  teamSideRight: {
+    alignItems: "flex-end"
+  },
   team: {
     color: colors.text,
-    flex: 1,
-    fontSize: 20,
-    fontWeight: "900"
+    fontSize: 16,
+    fontWeight: "900",
+    textAlign: "center"
   },
   teamRight: {
     textAlign: "right"

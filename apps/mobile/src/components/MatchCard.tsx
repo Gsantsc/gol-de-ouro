@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Clock, Lock, MapPin, RadioTower, Trophy } from "lucide-react-native";
 import type { Match, Prediction } from "../shared";
 import {
@@ -7,10 +7,9 @@ import {
   canSubmitPrediction,
   formatDateTimePtBr,
   getTeamDisplayName,
-  MATCH_STATUS_LABELS,
-  resolveFlagUrl,
-  getTeamInitials
+  MATCH_STATUS_LABELS
 } from "../shared";
+import { TeamFlag } from "./TeamFlag";
 import { colors, radius, spacing } from "../theme/tokens";
 import { Pill } from "./ui";
 
@@ -157,19 +156,11 @@ const TeamLine = ({
   logoUrl?: string | null;
   score: number;
 }) => {
-  const initials = getTeamInitials(name);
-  const flagUrl = logoUrl || resolveFlagUrl(name);
   const displayName = getTeamDisplayName(name);
 
   return (
     <View style={styles.teamLine}>
-      <View style={styles.badge}>
-        {flagUrl ? (
-          <Image source={{ uri: flagUrl }} style={styles.logo} />
-        ) : (
-          <Text style={styles.badgeText}>{initials}</Text>
-        )}
-      </View>
+      <TeamFlag logoUrl={logoUrl} name={name} size={26} />
       <Text numberOfLines={1} style={styles.teamName}>{displayName}</Text>
       <View style={styles.scoreBadge}>
         <Text style={styles.scoreText}>{score}</Text>

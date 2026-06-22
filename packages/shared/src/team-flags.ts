@@ -281,6 +281,12 @@ export const TEAM_ALIASES: Record<string, string> = {
   "vietna": "Vietnam",
   
   "filipinas": "Philippines",
+
+  "congo dr": "DR Congo",
+  "dr congo": "DR Congo",
+  "democratic republic of the congo": "DR Congo",
+  "uzbekistan": "Uzbekistan",
+  "turkiye": "Turkey",
 };
 
 /**
@@ -363,6 +369,8 @@ export const TEAM_ISO_CODES: Record<string, string> = {
   "Thailand": "th",
   "Vietnam": "vn",
   "Philippines": "ph",
+  "DR Congo": "cd",
+  "Uzbekistan": "uz",
 };
 
 /**
@@ -444,6 +452,8 @@ export const TEAM_FIFA_CODES: Record<string, string> = {
   "Thailand": "THA",
   "Vietnam": "VIE",
   "Philippines": "PHI",
+  "DR Congo": "COD",
+  "Uzbekistan": "UZB",
 };
 
 /**
@@ -486,14 +496,50 @@ export const getFifaFlagUrl = (teamName: string): string | null => {
 
 /**
  * Resolves flag URL with fallback chain:
- * 1. SVG from flagcdn.com (primary)
- * 2. PNG from flagcdn.com (fallback)
- * 3. FIFA flag (fallback)
+ * 1. PNG from flagcdn.com (primary, best RN/PWA support)
+ * 2. SVG from flagcdn.com
+ * 3. FIFA flag
  * 4. null (use placeholder)
  */
-export const resolveFlagUrl = (teamName: string): string | null => {
-  return getFlagCdnSvgUrl(teamName) || getFlagCdnUrl(teamName) || getFifaFlagUrl(teamName);
+export const resolveFlagUrl = (teamName: string): string | null =>
+  getFlagUrlCandidates(teamName)[0] ?? null;
+
+export const isPlaceholderTeam = (teamName: string) =>
+  /^(TBD|Winner |Loser |Runner-up |Third Place |Group |Quarterfinal|Round of|Semifinal)/i.test(teamName.trim());
+
+export const getFlagUrlCandidates = (teamName: string, logoUrl?: string | null): string[] => {
+  const urls: string[] = [];
+  const trimmedLogo = logoUrl?.trim();
+
+  if (trimmedLogo) urls.push(trimmedLogo);
+  if (isPlaceholderTeam(teamName)) return urls;
+
+  const png = getFlagCdnUrl(teamName);
+  const svg = getFlagCdnSvgUrl(teamName);
+  const fifa = getFifaFlagUrl(teamName);
+
+  if (png) urls.push(png);
+  if (svg) urls.push(svg);
+  if (fifa) urls.push(fifa);
+
+  return [...new Set(urls)];
 };
+
+export const resolveFlagUrlForTeam = (teamName: string, logoUrl?: string | null): string | null =>
+  getFlagUrlCandidates(teamName, logoUrl)[0] ?? null;
+
+export const enrichMatchFlagUrls = <
+  T extends {
+    home_team: string;
+    away_team: string;
+    home_team_logo_url?: string | null;
+    away_team_logo_url?: string | null;
+  }
+>(match: T): T => ({
+  ...match,
+  home_team_logo_url: resolveFlagUrlForTeam(match.home_team, match.home_team_logo_url),
+  away_team_logo_url: resolveFlagUrlForTeam(match.away_team, match.away_team_logo_url)
+});
 
 /**
  * Gets team initials for placeholder

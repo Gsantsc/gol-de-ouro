@@ -1,4 +1,5 @@
 import type { MatchesProvider, ProviderMatch, ProviderMatchStats } from "./types";
+import { resolveFlagUrlForTeam } from "../../team-flags";
 import { staticWC2026Fixtures } from "./static-wc2026-data";
 
 const defaultStats = (): ProviderMatchStats => ({
@@ -21,14 +22,14 @@ const defaultStats = (): ProviderMatchStats => ({
 });
 
 const fallbackFixtures: ProviderMatch[] = staticWC2026Fixtures.map((fixture) => ({
-  awayLogoUrl: null,
+  awayLogoUrl: resolveFlagUrlForTeam(fixture.awayTeam),
   awayScore: 0,
   awayTeam: fixture.awayTeam,
   championship: "world_cup_2026",
   events: [],
   externalId: fixture.externalId,
   hasFinalScore: false,
-  homeLogoUrl: null,
+  homeLogoUrl: resolveFlagUrlForTeam(fixture.homeTeam),
   homeScore: 0,
   homeTeam: fixture.homeTeam,
   kickoff: fixture.kickoff,

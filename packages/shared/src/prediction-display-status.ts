@@ -71,6 +71,14 @@ export const getPredictionCategory = (
   match?: Match | null
 ): PredictionCategory => {
   if (!match) return "unavailable";
+  
+  // Se o jogo ainda não começou, sempre mostrar como waiting
+  const now = new Date();
+  const start = new Date(match.start_time);
+  if (!Number.isNaN(start.getTime()) && now < start) {
+    return "waiting";
+  }
+  
   if (isMatchProcessedForPrediction(prediction, match)) return "scored";
   if (isMatchLiveStatus(match)) return "live";
   return "waiting";

@@ -1,20 +1,9 @@
 import { StyleSheet, Text, View } from "react-native";
 import { CheckCircle2, Clock3, Target } from "lucide-react-native";
 import type { Match, Player, Prediction, PredictionWinner, Ranking } from "../shared";
-import { calculateMatchStatus, deriveUserPerformance, formatDateTimePtBr, formatMatchupDisplayName, getTeamDisplayName } from "../shared";
+import { calculateMatchStatus, deriveUserPerformance, formatDateTimePtBr, formatMatchupDisplayName, getPredictionDisplayStatus, getPredictionStatusLabel, getPredictionStatusTone, getTeamDisplayName } from "../shared";
 import { Card, EmptyState, MetricTile, Pill, ScreenScroll, SectionTitle } from "../components/ui";
 import { colors, radius, spacing } from "../theme/tokens";
-
-const getPredictionStatus = (prediction: Prediction, match?: Match) => {
-  if (!match || match.status !== "encerrado") return "aguardando";
-  return prediction.points > 0 ? "acertou" : "errou";
-};
-
-const getStatusTone = (status: string) => {
-  if (status === "acertou") return "green";
-  if (status === "errou") return "red";
-  return "gold";
-};
 
 const winnerLabel = (winner?: PredictionWinner | null, match?: Match) => {
   if (winner === "home") return getTeamDisplayName(match?.home_team) || "Casa";
@@ -48,24 +37,23 @@ export const PredictionsScreen = ({
   const playerById = new Map(players.map((player) => [player.id, player]));
   const rows = predictions.map((prediction) => {
     const match = matches.find((item) => item.id === prediction.match_id);
-    const calculatedStatus = match ? calculateMatchStatus(match, new Date(), predictionLockMinutes) : "fechado";
-    const bucket =
-      calculatedStatus === "aberto"
-        ? "Em aberto"
-        : calculatedStatus === "ao_vivo"
-          ? "Em andamento"
-          : prediction.points > 0
-            ? "Pontuados"
-            : calculatedStatus === "encerrado"
-              ? "Finalizados"
-              : "Em aberto";
-
-    return { bucket, match, prediction };
+    const displayStatus = getPredictionDisplayStatus(prediction, match);
+    const category = getPredictionCategory(prediction, match);
+    
+    return { category, displayStatus, match, prediction };
   });
-  const sections = ["Em aberto", "Em andamento", "Finalizados", "Pontuados"].map((title) => ({
-    rows: rows.filter((row) => row.bucket === title),
-    title
-  }));
+  
+  const allCount = rows.length;
+  const scoredCount = rows.filter(row => row.category === "scored").length;
+  const waitingCount = rows.filter(row => row.category === "waiting").length;
+  const liveCount = rows.filter(row => row.category === "live").length;
+  
+  const sections = [
+    { title: "Todos", count: allCount, filter: () => rows },
+    { title: "Pontuados", count: scoredCount, filter: () => rows.filter(row => row.category === "scored") },
+    { title: "Aguardando", count: waitingCount, filter: () => rows.filter(row => row.category === "waiting") },
+    { title: "Ao vivo", count: liveCount, filter: () => rows.filter(row => row.category === "live") }
+  ];
 
   return (
     <ScreenScroll>
@@ -79,11 +67,12 @@ export const PredictionsScreen = ({
       {predictions.length ? (
         sections.map((section) => (
           <View key={section.title} style={styles.section}>
-            <SectionTitle title={section.title} />
+            <SectionTitle title={`${section.title}: ${section.count}`} />
             <Card>
-              {section.rows.length ? (
-                section.rows.map(({ match, prediction }) => {
-                  const status = getPredictionStatus(prediction, match);
+              {section.filter().length ? (
+                section.filter().map(({ match, prediction, displayStatus }) => {
+                  const statusLabel = getPredictionStatusLabel(displayStatus);
+                  const statusTone = getPredictionStatusTone(displayStatus);
 
                   return (
                     <View key={prediction.id} style={styles.row}>
@@ -95,7 +84,7 @@ export const PredictionsScreen = ({
                           {match ? formatDateTimePtBr(match.start_time) : "Data indisponivel"}
                         </Text>
                         <View style={styles.status}>
-                          <Pill tone={getStatusTone(status)}>{status}</Pill>
+                          <Pill tone={statusTone}>{statusLabel}</Pill>
                         </View>
                         <View style={styles.detailsGrid}>
                           <PredictionDetail label="Vencedor" value={winnerLabel(prediction.predicted_winner, match)} />

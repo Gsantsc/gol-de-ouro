@@ -1,4 +1,4 @@
-import { calculateMatchStatus } from "./match-status-engine";
+import { isMatchProcessedForPrediction } from "./prediction-processing";
 import type { Match, Prediction, Ranking } from "./types";
 
 export type UserPerformance = {
@@ -30,7 +30,7 @@ export const deriveUserPerformance = ({
   const finished = predictions
     .filter((prediction) => {
       const match = matchById.get(prediction.match_id);
-      return match ? calculateMatchStatus(match) === "encerrado" : false;
+      return match ? isMatchProcessedForPrediction(prediction, match) : false;
     })
     .sort((left, right) => predictionTime(left, matchById) - predictionTime(right, matchById));
 

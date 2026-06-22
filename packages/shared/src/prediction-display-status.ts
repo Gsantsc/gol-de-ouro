@@ -1,4 +1,5 @@
 import type { Match, Prediction } from "./types";
+import { isMatchLiveStatus, isMatchProcessedForPrediction } from "./prediction-processing";
 
 export type PredictionDisplayStatus =
   | "waiting"
@@ -20,19 +21,15 @@ export const getPredictionDisplayStatus = (
     return "invalid_match";
   }
 
-  if (match.status === "ao_vivo") {
+  if (isMatchProcessedForPrediction(prediction, match)) {
+    return (prediction.points ?? 0) > 0 ? "scored_win" : "scored_zero";
+  }
+
+  if (isMatchLiveStatus(match)) {
     return "live";
   }
 
-  if (match.status !== "encerrado") {
-    return "waiting";
-  }
-
-  if ((prediction.points ?? 0) > 0) {
-    return "scored_win";
-  }
-
-  return "scored_zero";
+  return "waiting";
 };
 
 export const getPredictionStatusLabel = (status: PredictionDisplayStatus): string => {
@@ -70,11 +67,11 @@ export const getPredictionStatusTone = (status: PredictionDisplayStatus): Predic
 };
 
 export const getPredictionCategory = (
-  _prediction: Prediction,
+  prediction: Prediction,
   match?: Match | null
 ): PredictionCategory => {
   if (!match) return "unavailable";
-  if (match.status === "ao_vivo") return "live";
-  if (match.status === "encerrado") return "scored";
+  if (isMatchProcessedForPrediction(prediction, match)) return "scored";
+  if (isMatchLiveStatus(match)) return "live";
   return "waiting";
 };

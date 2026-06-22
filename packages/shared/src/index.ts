@@ -2,6 +2,7 @@ export * from "./types";
 export * from "./match-status-engine";
 export * from "./prediction-window-service";
 export * from "./prediction-display-status";
+export * from "./prediction-processing";
 export * from "./scoring";
 export * from "./time";
 export * from "./constants";

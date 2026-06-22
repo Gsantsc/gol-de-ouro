@@ -1,6 +1,7 @@
 export * from "./types";
 export * from "./match-status-engine";
 export * from "./prediction-display-status";
+export * from "./prediction-processing";
 export * from "./prediction-window-service";
 export * from "./scoring";
 export * from "./time";

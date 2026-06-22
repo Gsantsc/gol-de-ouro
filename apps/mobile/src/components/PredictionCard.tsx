@@ -12,6 +12,29 @@ import { colors, radius, spacing } from "../theme/tokens";
 
 const COMPACT_BREAKPOINT = 560;
 
+const safeNumberLabel = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? String(parsed) : "-";
+};
+
+const getOfficialScoreLabel = (match?: Match | null) => {
+  if (!match) return "- x -";
+  const home = match.live_score?.home ?? match.home_score;
+  const away = match.live_score?.away ?? match.away_score;
+  return `${safeNumberLabel(home)} x ${safeNumberLabel(away)}`;
+};
+
+const getUserPredictionScoreLabel = (prediction: Prediction) => {
+  return `${safeNumberLabel(prediction.predicted_home_score)} x ${safeNumberLabel(prediction.predicted_away_score)}`;
+};
+
+const getPointsLabel = (prediction: Prediction, match?: Match | null) => {
+  if (!match) return `${Number(prediction.points ?? 0)} pts`;
+  if (match.status === "ao_vivo") return "Aguardando final";
+  if (match.status !== "encerrado") return "Aguardando";
+  return `${Number(prediction.points ?? 0)} pts`;
+};
+
 const winnerLabel = (winner: PredictionWinner | null | undefined, match: Match | null) => {
   if (winner === "home") return getTeamDisplayName(match?.home_team) || "Casa";
   if (winner === "away") return getTeamDisplayName(match?.away_team) || "Visitante";
@@ -83,9 +106,9 @@ export const PredictionCard = ({
   const detailBasis: DimensionValue = width >= 1024 ? "18%" : width >= 768 ? "30%" : "48%";
   const statusLabel = getPredictionStatusLabel(displayStatus);
   const statusTone = getPredictionStatusTone(displayStatus);
-  const homeScore = prediction.predicted_home_score ?? "-";
-  const awayScore = prediction.predicted_away_score ?? "-";
-  const points = prediction.points ?? 0;
+  const officialScore = getOfficialScoreLabel(match);
+  const userPredictionScore = getUserPredictionScoreLabel(prediction);
+  const pointsLabel = getPointsLabel(prediction, match);
 
   return (
     <View style={styles.predictionCard}>
@@ -104,7 +127,7 @@ export const PredictionCard = ({
           />
           {!compact ? (
             <View style={styles.scoreCenter}>
-              <Text style={styles.scoreText}>{homeScore} x {awayScore}</Text>
+              <Text style={styles.scoreText}>{officialScore}</Text>
             </View>
           ) : null}
           <TeamSide
@@ -123,16 +146,16 @@ export const PredictionCard = ({
 
       {compact ? (
         <View style={styles.scoreCenterCompact}>
-          <Text style={styles.scoreText}>{homeScore} x {awayScore}</Text>
+          <Text style={styles.scoreText}>{officialScore}</Text>
         </View>
       ) : null}
 
       <View style={styles.predictionSummary}>
         <Text style={styles.predictionSummaryLabel}>
-          Seu palpite: {homeScore} x {awayScore}
+          Seu palpite: {userPredictionScore}
         </Text>
-        <Text style={[styles.pointsText, points > 0 ? styles.pointsPositive : styles.pointsNeutral]}>
-          {points} pts
+        <Text style={[styles.pointsText, prediction.points && prediction.points > 0 ? styles.pointsPositive : styles.pointsNeutral]}>
+          {pointsLabel}
         </Text>
       </View>
 

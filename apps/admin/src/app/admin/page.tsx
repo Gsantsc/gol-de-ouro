@@ -70,6 +70,7 @@ import {
   updateMatch
 } from "@/lib/admin-api";
 import { supabase } from "@/lib/supabase";
+import { formatSyncErrorForDisplay } from "@/lib/sync-error-format";
 import { BrandLogo } from "@/components/BrandLogo";
 import { PlayerPicker } from "@/components/PlayerPicker";
 
@@ -1080,8 +1081,8 @@ const MatchesPanel = ({
               ))}
             </div>
             {lastResultsSyncSummary.errors.length > 0 && (
-              <div className="mt-3 rounded-md border border-red-400/30 bg-red-500/10 p-3 text-xs font-bold leading-5 text-red-100">
-                {lastResultsSyncSummary.errors.map((error) => typeof error === "string" ? error : JSON.stringify(error)).join(" | ")}
+              <div className="mt-3 rounded-md border border-red-400/30 bg-red-500/10 p-3 text-xs font-bold leading-5 text-red-100 whitespace-pre-line">
+                {lastResultsSyncSummary.errors.map((error) => formatSyncErrorForDisplay(error)).join("\n\n")}
               </div>
             )}
           </div>
@@ -1108,8 +1109,8 @@ const MatchesPanel = ({
                     <span>{run.scored_predictions ?? 0} palpites pontuados</span>
                   </div>
                   {run.error_message && (
-                    <div className="mt-2 rounded-md border border-red-400/20 bg-red-500/5 p-2 text-xs font-bold leading-5 text-red-200">
-                      {typeof run.error_message === "string" ? run.error_message : JSON.stringify(run.error_message)}
+                    <div className="mt-2 rounded-md border border-red-400/20 bg-red-500/5 p-2 text-xs font-bold leading-5 text-red-200 whitespace-pre-line">
+                      {formatSyncErrorForDisplay(run.error_message)}
                     </div>
                   )}
                 </div>

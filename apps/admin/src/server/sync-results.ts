@@ -9,6 +9,7 @@ import {
   type MatchStatus,
   type PredictionWinner
 } from "@gol-de-ouro/shared";
+import { formatSyncErrorForDisplay } from "../lib/sync-error-format";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -172,23 +173,55 @@ const readString = (value: unknown) => (typeof value === "string" && value.trim(
 
 // SYNC ERROR SERIALIZATION - Robust error serialization to avoid [object Object]
 const serializeSyncError = (error: unknown): string => {
+  if (error && typeof error === "object" && "code" in error) {
+    const record = error as { code?: unknown; message?: unknown };
+    if (String(record.code) === "21000") {
+      return formatSyncErrorForDisplay({
+        code: "21000",
+        message: typeof record.message === "string" ? record.message : undefined,
+      });
+    }
+  }
+
   if (error instanceof Error) {
-    // Include stack trace in development for debugging
-    const stack = process.env.NODE_ENV === "development" && error.stack ? ` (${error.stack.split("\n")[0]})` : "";
-    return `${error.message}${stack}`;
+    const formatted = formatSyncErrorForDisplay(error.message);
+    const stack = process.env.NODE_ENV === "development" && error.stack
+      ? ` (${error.stack.split("\n")[0]})`
+      : "";
+    return `${formatted}${stack}`;
   }
-  if (typeof error === "string") return error;
-  if (error === null || error === undefined) return "";
-  if (Array.isArray(error)) {
-    return error.map((item) => serializeSyncError(item)).filter(Boolean).join(" | ");
+
+  return formatSyncErrorForDisplay(error);
+};
+
+const dedupeByKey = <T,>(
+  rows: T[],
+  getKey: (row: T) => string,
+  pickPreferred: (current: T, candidate: T) => T = (_current, candidate) => candidate,
+) => {
+  const map = new Map<string, T>();
+
+  for (const row of rows) {
+    const key = getKey(row);
+    const existing = map.get(key);
+    map.set(key, existing ? pickPreferred(existing, row) : row);
   }
-  try {
-    const stringified = JSON.stringify(error);
-    if (stringified === "{}" || stringified === "[]") return String(error);
-    return stringified;
-  } catch {
-    return String(error);
-  }
+
+  return [...map.values()];
+};
+
+const logDedupedPayload = (
+  label: "standings" | "rankings",
+  before: number,
+  after: number,
+) => {
+  if (before === after) return;
+
+  console.warn(`[sync-results] ${label} payload deduplicated`, {
+    after,
+    before,
+    removed: before - after,
+  });
 };
 
 const normalizeTeam = (value: string) =>
@@ -548,9 +581,12 @@ const refreshRankings = async (
   }
 
   if (changed.length && !dryRun) {
+    const rankingPayload = dedupeByKey(changed, (row) => row.user_id);
+    logDedupedPayload("rankings", changed.length, rankingPayload.length);
+
     const { error } = await supabase
       .from("rankings")
-      .upsert(changed, { onConflict: "user_id" });
+      .upsert(rankingPayload, { onConflict: "user_id" });
     if (error) throw error;
   }
 
@@ -684,21 +720,30 @@ const refreshGroupStandings = async (supabase: SupabaseClient, matches: MatchRow
   });
 
   if (changed.length && !dryRun) {
-    const payload = changed.map((standing) => ({
-      drawn: standing.drawn,
-      form: standing.form.slice(-5).join(""),
-      goal_difference: standing.goal_difference,
-      goals_against: standing.goals_against,
-      goals_for: standing.goals_for,
-      group_code: standing.group_code,
-      lost: standing.lost,
-      played: standing.played,
-      points: standing.points,
-      position: standing.position,
-      team_name: standing.team_name,
-      tournament_id: standing.tournament_id,
-      won: standing.won,
-    }));
+    const payloadByConflictKey = new Map<string, StandingRow>();
+
+    for (const standing of changed) {
+      const key = `${standing.tournament_id}:${standing.team_name}`;
+      payloadByConflictKey.set(key, {
+        drawn: standing.drawn,
+        form: standing.form.slice(-5).join(""),
+        goal_difference: standing.goal_difference,
+        goals_against: standing.goals_against,
+        goals_for: standing.goals_for,
+        group_code: standing.group_code,
+        lost: standing.lost,
+        played: standing.played,
+        points: standing.points,
+        position: standing.position,
+        team_name: standing.team_name,
+        tournament_id: standing.tournament_id,
+        won: standing.won,
+      });
+    }
+
+    const payload = [...payloadByConflictKey.values()];
+    logDedupedPayload("standings", changed.length, payload.length);
+
     const { error: upsertError } = await supabase
       .from("standings")
       .upsert(payload, { onConflict: "tournament_id,team_name" });

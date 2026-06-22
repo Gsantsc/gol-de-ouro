@@ -52,6 +52,7 @@
     "validate:group-invites": "node scripts/validate-group-invites.cjs",
     "validate:match-rules": "node scripts/validate-match-rules.cjs",
     "validate:predictions-display": "node scripts/validate-user-predictions-display.cjs",
+    "validate:sync-upsert-dedupe": "node scripts/validate-sync-upsert-dedupe.cjs",
     "validate:world-cup-times": "node scripts/validate-world-cup-times.cjs",
     "repair:world-cup-2026-schedule": "node scripts/repair-world-cup-2026-schedule.cjs",
     "repair:world-cup-2026-schedule:dry-run": "node scripts/repair-world-cup-2026-schedule.cjs --dry-run",

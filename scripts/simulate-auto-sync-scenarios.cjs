@@ -314,12 +314,56 @@ const runCase5 = () => {
   return { final: matches.find((match) => match.match_number === 104), knockoutUpdated: updated, thirdPlace: matches.find((match) => match.match_number === 103) };
 };
 
+const dedupeStandingsPayload = (rows) => {
+  const payloadByConflictKey = new Map();
+
+  for (const standing of rows) {
+    payloadByConflictKey.set(`${standing.tournament_id}:${standing.team_name}`, standing);
+  }
+
+  return [...payloadByConflictKey.values()];
+};
+
+const runCase6 = () => {
+  const tournamentId = "wc-2026";
+  const duplicatePayload = [
+    {
+      tournament_id: tournamentId,
+      team_name: "Mexico",
+      group_code: "A",
+      played: 1,
+      points: 3,
+    },
+    {
+      tournament_id: tournamentId,
+      team_name: "Mexico",
+      group_code: "B",
+      played: 2,
+      points: 4,
+    },
+  ];
+
+  const deduped = dedupeStandingsPayload(duplicatePayload);
+  assert(deduped.length === 1, "Caso 6: standings duplicado deveria virar uma linha.", {
+    after: deduped.length,
+    before: duplicatePayload.length,
+  });
+  assert(deduped[0].played === 2, "Caso 6: ultima linha duplicada deve prevalecer no payload.");
+
+  return {
+    after: deduped.length,
+    before: duplicatePayload.length,
+    removed: duplicatePayload.length - deduped.length,
+  };
+};
+
 const cases = [
   ["Caso 1 - Brasil 2 x 1 Canada", runCase1],
   ["Caso 2 - Grupo A finalizado", runCase2],
   ["Caso 3 - Oitavas finalizadas", runCase3],
   ["Caso 4 - Quartas finalizadas", runCase4],
   ["Caso 5 - Semi finalizada", runCase5],
+  ["Caso 6 - standings upsert duplicate payload", runCase6],
 ];
 
 const results = cases.map(([name, run]) => {

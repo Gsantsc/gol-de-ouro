@@ -11,6 +11,7 @@ import {
   ClipboardList,
   Copy,
   Link as LinkIcon,
+  Loader2,
   Lock,
   Medal,
   Plus,
@@ -56,6 +57,8 @@ import {
   getCurrentProfile,
   loadAdminData,
   reactivateUser,
+  recalculatePredictionsNow,
+  type RecalculatePredictionsSummary,
   rejectUser,
   removeGroupMember,
   signInAdmin,
@@ -191,6 +194,7 @@ export default function AdminPage() {
   const [data, setData] = useState<AdminState>(emptyState);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [lastStatusUpdateSummary, setLastStatusUpdateSummary] = useState<{ checkedCount?: number; updatedCount?: number; byStatus?: Record<string, number> } | null>(null);
 
   const refresh = useCallback(async () => {
     const profile = await getCurrentProfile();
@@ -269,8 +273,20 @@ export default function AdminPage() {
       return true;
     } catch (nextError) {
       const message = readError(nextError);
-      setError(message);
-      setToast({ kind: "error", message });
+      let detailedMessage = message;
+      
+      // Try to extract additional error details if available
+      if (nextError && typeof nextError === 'object' && 'message' in nextError) {
+        const errorObj = nextError as { message?: string; details?: string; hint?: string };
+        if (errorObj.details) {
+          detailedMessage = `${message}: ${errorObj.details}`;
+        } else if (errorObj.hint) {
+          detailedMessage = `${message}. ${errorObj.hint}`;
+        }
+      }
+      
+      setError(detailedMessage);
+      setToast({ kind: "error", message: detailedMessage });
       return false;
     } finally {
       if (options.loadingKey) {
@@ -279,6 +295,10 @@ export default function AdminPage() {
         setBusy(false);
       }
     }
+  };
+
+  const getActionButtonLabel = (buttonKey: string, defaultLabel: string, loadingLabel: string) => {
+    return actionKey === buttonKey ? loadingLabel : defaultLabel;
   };
 
   if (authLoading) {
@@ -873,11 +893,14 @@ const MatchesPanel = ({
   const [drafts, setDrafts] = useState<Record<string, MatchDraft>>({});
   const [density, setDensity] = useState<MatchDensity>("comfortable");
   const [lastResultsSyncSummary, setLastResultsSyncSummary] = useState<SyncResultsSummary | null>(null);
+  const [lastRecalculateSummary, setLastRecalculateSummary] = useState<RecalculatePredictionsSummary | null>(null);
+  const [lastStatusUpdateSummary, setLastStatusUpdateSummary] = useState<{ checkedCount?: number; updatedCount?: number; byStatus?: Record<string, number> } | null>(null);
   const [matchQuery, setMatchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | MatchStatus>("all");
   const [page, setPage] = useState(1);
   const pageSize = density === "compact" ? 12 : 8;
   const manualResultsSyncBusy = actionKey === "sync-results";
+  const manualRecalculateBusy = actionKey === "recalculate-predictions";
   const predictionLockMinutes = settings.prediction_lock_minutes;
   const teamOptions = useMemo(() => {
     const names = new Set<string>();
@@ -986,14 +1009,12 @@ const MatchesPanel = ({
 
   const syncSummaryItems = lastResultsSyncSummary
     ? [
-        { label: "Jogos consultados", value: lastResultsSyncSummary.checkedMatches },
-        { label: "Jogos atualizados", value: lastResultsSyncSummary.updatedMatches },
-        { label: "Ao vivo", value: lastResultsSyncSummary.liveMatches },
-        { label: "Encerrados", value: lastResultsSyncSummary.finishedMatches },
-        { label: "Palpites pontuados", value: lastResultsSyncSummary.scoredPredictions },
-        { label: "Ranking atualizado", value: lastResultsSyncSummary.rankingUpdated },
-        { label: "Classificacao", value: lastResultsSyncSummary.standingsUpdated },
-        { label: "Mata-mata", value: lastResultsSyncSummary.knockoutUpdated }
+        { label: "Jogos consultados", value: lastResultsSyncSummary.summary.checkedMatches },
+        { label: "Jogos atualizados", value: lastResultsSyncSummary.summary.updatedMatches },
+        { label: "Ao vivo", value: lastResultsSyncSummary.summary.liveMatches },
+        { label: "Encerrados", value: lastResultsSyncSummary.summary.finishedMatches },
+        { label: "Palpites pontuados", value: lastResultsSyncSummary.summary.scoredPredictions },
+        { label: "Ranking atualizado", value: lastResultsSyncSummary.summary.rankingUpdated }
       ]
     : [];
 
@@ -1010,7 +1031,7 @@ const MatchesPanel = ({
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <button
               className="btn-secondary"
-              disabled={busy}
+              disabled={busy || Boolean(actionKey)}
               onClick={() => setShowManualCreate(!showManualCreate)}
             >
               <Plus className="h-4 w-4" />
@@ -1018,19 +1039,29 @@ const MatchesPanel = ({
             </button>
             <button
               className="btn-primary"
-              disabled={busy}
+              disabled={busy || Boolean(actionKey)}
               onClick={() =>
                 onAction(() => syncAutomaticMatches(tournaments), {
+                  loadingKey: "sync-matches",
                   successMessage: "Jogos sincronizados."
                 })
               }
             >
-              <RefreshCw className="h-4 w-4" />
-              Sincronizar Jogos
+              {actionKey === "sync-matches" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Sincronizando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4" />
+                  Sincronizar Jogos
+                </>
+              )}
             </button>
             <button
               className="btn-secondary"
-              disabled={busy || manualResultsSyncBusy}
+              disabled={busy || Boolean(actionKey)}
               onClick={() =>
                 onAction(async () => {
                   const summary = await syncResultsNow({ force: true });
@@ -1041,23 +1072,160 @@ const MatchesPanel = ({
                 })
               }
             >
-              <RefreshCw className={`h-4 w-4 ${manualResultsSyncBusy ? "animate-spin" : ""}`} />
-              Atualizar resultados agora
+              {actionKey === "sync-results" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Atualizando resultados...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4" />
+                  Atualizar resultados agora
+                </>
+              )}
             </button>
             <button
               className="btn-secondary"
-              disabled={busy}
+              disabled={busy || Boolean(actionKey)}
               onClick={() =>
-                onAction(updateAutomaticMatchStatuses, {
+                onAction(async () => {
+                  const summary = await recalculatePredictionsNow();
+                  setLastRecalculateSummary(summary);
+                }, {
+                  loadingKey: "recalculate-predictions",
+                  successMessage: "Pontuacao recalculada desde o inicio."
+                })
+              }
+            >
+              {actionKey === "recalculate-predictions" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Recalculando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4" />
+                  Recalcular pontuacao desde o inicio
+                </>
+              )}
+            </button>
+            <button
+              className="btn-secondary"
+              disabled={busy || Boolean(actionKey)}
+              onClick={() =>
+                onAction(async () => {
+                  const summary = await updateAutomaticMatchStatuses();
+                  setLastStatusUpdateSummary(summary);
+                  return summary;
+                }, {
+                  loadingKey: "update-status",
                   successMessage: "Status das partidas atualizado."
                 })
               }
             >
-              <RefreshCw className="h-4 w-4" />
-              Atualizar status
+              {actionKey === "update-status" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Atualizando status...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4" />
+                  Atualizar status
+                </>
+              )}
             </button>
           </div>
         </div>
+
+        {actionKey && (
+          <div className="mt-5 rounded-lg border border-gold/50 bg-pitch-900/45 p-4">
+            <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-gold" />
+                <div>
+                  <p className="text-sm font-black uppercase tracking-normal text-gold">Executando ação</p>
+                  <p className="mt-1 text-xs text-white/55">
+                    {actionKey === "sync-matches" && "Sincronizando jogos..."}
+                    {actionKey === "sync-results" && "Atualizando resultados ESPN..."}
+                    {actionKey === "recalculate-predictions" && "Recalculando pontuação..."}
+                    {actionKey === "update-status" && "Atualizando status das partidas..."}
+                  </p>
+                </div>
+              </div>
+              <span className="badge badge-gold">Processando...</span>
+            </div>
+            <p className="mt-2 text-xs text-white/55">
+              Não feche a página. Ação em andamento.
+            </p>
+          </div>
+        )}
+
+        {lastStatusUpdateSummary && (
+          <div className="mt-5 rounded-lg border border-white/10 bg-pitch-900/45 p-4">
+            <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-black uppercase tracking-normal text-gold">Ultima atualizacao de status</p>
+                <p className="mt-1 text-xs text-white/55">
+                  {lastStatusUpdateSummary.checkedCount ?? 0} jogos consultados - {lastStatusUpdateSummary.updatedCount ?? 0} alterados
+                </p>
+              </div>
+              <span className="badge badge-gold">ok</span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                <p className="text-lg font-black text-white">{lastStatusUpdateSummary.checkedCount ?? 0}</p>
+                <p className="mt-1 text-xs font-bold text-white/50">Jogos consultados</p>
+              </div>
+              <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                <p className="text-lg font-black text-white">{lastStatusUpdateSummary.updatedCount ?? 0}</p>
+                <p className="mt-1 text-xs font-bold text-white/50">Jogos alterados</p>
+              </div>
+              {lastStatusUpdateSummary.byStatus && (
+                <>
+                  <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                    <p className="text-lg font-black text-white">{lastStatusUpdateSummary.byStatus.ao_vivo ?? 0}</p>
+                    <p className="mt-1 text-xs font-bold text-white/50">Ao vivo</p>
+                  </div>
+                  <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                    <p className="text-lg font-black text-white">{lastStatusUpdateSummary.byStatus.encerrado ?? 0}</p>
+                    <p className="mt-1 text-xs font-bold text-white/50">Encerrados</p>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {lastRecalculateSummary && (
+          <div className="mt-5 rounded-lg border border-white/10 bg-pitch-900/45 p-4">
+            <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-black uppercase tracking-normal text-gold">Ultimo recalculo de pontuacao</p>
+                <p className="mt-1 text-xs text-white/55">{lastRecalculateSummary.message}</p>
+              </div>
+              <span className="badge badge-gold">ok</span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                <p className="text-lg font-black text-white">{lastRecalculateSummary.summary.finishedMatches}</p>
+                <p className="mt-1 text-xs font-bold text-white/50">Jogos encerrados</p>
+              </div>
+              <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                <p className="text-lg font-black text-white">{lastRecalculateSummary.summary.predictionsUpdated}</p>
+                <p className="mt-1 text-xs font-bold text-white/50">Palpites recalculados</p>
+              </div>
+              <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                <p className="text-lg font-black text-white">{lastRecalculateSummary.summary.rankingsUpdated}</p>
+                <p className="mt-1 text-xs font-bold text-white/50">Rankings atualizados</p>
+              </div>
+              <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                <p className="text-lg font-black text-white">{lastRecalculateSummary.summary.skippedMatches}</p>
+                <p className="mt-1 text-xs font-bold text-white/50">Jogos ignorados</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {lastResultsSyncSummary && (
           <div className="mt-5 rounded-lg border border-white/10 bg-pitch-900/45 p-4">

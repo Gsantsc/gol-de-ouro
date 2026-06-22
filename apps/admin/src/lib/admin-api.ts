@@ -418,8 +418,9 @@ export const syncAutomaticMatches = async (_tournaments: Tournament[]) => {
     method: "POST"
   });
 
-  const payload = (await response.json()) as { error?: string };
+  const payload = (await response.json()) as { error?: string; success?: boolean; action?: string; provider?: string; status?: string; startedAt?: string; finishedAt?: string; durationMs?: number; summary?: { checkedMatches?: number; insertedMatches?: number; updatedMatches?: number; skippedMatches?: number; liveMatches?: number; finishedMatches?: number; scoredPredictions?: number; rankingUpdated?: number; teamsSynced?: number; cacheHits?: number; cacheMisses?: number } };
   if (!response.ok) throw new Error(payload.error ?? "Não foi possível sincronizar partidas.");
+  return payload;
 };
 
 export const updateAutomaticMatchStatuses = async () => {
@@ -435,8 +436,9 @@ export const updateAutomaticMatchStatuses = async () => {
     method: "POST"
   });
 
-  const payload = (await response.json()) as { error?: string };
+  const payload = (await response.json()) as { error?: string; success?: boolean; action?: string; status?: string; checkedCount?: number; updatedCount?: number; byStatus?: Record<string, number>; updated?: Array<{ matchId: string; name: string; from: string; to: string }> };
   if (!response.ok) throw new Error(payload.error ?? "Não foi possível atualizar status das partidas.");
+  return payload;
 };
 
 export const syncEspnResults = async () => {
@@ -458,21 +460,26 @@ export const syncEspnResults = async () => {
 };
 
 export type SyncResultsSummary = {
-  checkedMatches: number;
-  dryRun: boolean;
-  errors: string[];
-  finishedAt: string;
-  finishedMatches: number;
-  knockoutUpdated: number;
-  liveMatches: number;
+  success: boolean;
+  action: string;
   provider: string;
-  rankingUpdated: number;
-  scoredPredictions: number;
+  status: string;
   startedAt: string;
-  standingsUpdated: number;
-  status: "success" | "partial_success" | "failed";
-  triggeredBy: string;
-  updatedMatches: number;
+  finishedAt: string;
+  durationMs: number;
+  summary: {
+    checkedMatches: number;
+    insertedMatches: number;
+    updatedMatches: number;
+    skippedMatches: number;
+    liveMatches: number;
+    finishedMatches: number;
+    scoredPredictions: number;
+    rankingUpdated: number;
+    errorsCount: number;
+  };
+  changedMatches: Array<{ id: string; homeTeam: string; awayTeam: string; before: { status: string; score: string }; after: { status: string; score: string } }>;
+  errors: Array<{ message: string }>;
 };
 
 export const syncResultsNow = async (options: { dryRun?: boolean; force?: boolean } = {}) => {
@@ -495,7 +502,46 @@ export const syncResultsNow = async (options: { dryRun?: boolean; force?: boolea
 
   const payload = (await response.json()) as SyncResultsSummary & { error?: string };
   if (!response.ok) {
-    throw new Error(payload.error ?? payload.errors?.[0] ?? "Nao foi possivel atualizar resultados.");
+    throw new Error(payload.error ?? payload.errors?.[0]?.message ?? "Nao foi possivel atualizar resultados.");
+  }
+  return payload;
+};
+
+export type RecalculatePredictionsSummary = {
+  message: string;
+  success: boolean;
+  summary: {
+    finishedMatches: number;
+    predictionsFound: number;
+    predictionsUpdated: number;
+    rankingsUpdated: number;
+    skippedMatches: number;
+    totalMatches: number;
+    usersUpdated: number;
+  };
+};
+
+export const recalculatePredictionsNow = async (options: { dryRun?: boolean; championship?: string } = {}) => {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error("Sessao administrativa expirada.");
+
+  const response = await fetch("/api/admin/recalculate-predictions", {
+    body: JSON.stringify({
+      championship: options.championship ?? "world_cup_2026",
+      dryRun: options.dryRun === true,
+    }),
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  const payload = (await response.json()) as RecalculatePredictionsSummary & { error?: string };
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Nao foi possivel recalcular pontuacao.");
   }
   return payload;
 };

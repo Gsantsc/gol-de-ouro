@@ -13,30 +13,56 @@ const { createClient } = require("@supabase/supabase-js");
 
 const VALID_TONES = new Set(["default", "green", "gold", "red", "blue"]);
 
+const readStats = (match) => (match?.stats && typeof match.stats === "object" ? match.stats : {});
+
+const isMatchKickoffInPast = (match, now = new Date()) => {
+  const start = new Date(match.start_time);
+  return !Number.isNaN(start.getTime()) && now.getTime() > start.getTime();
+};
+
+const isMatchLiveStatus = (match) => match?.status === "ao_vivo";
+
+const isMatchFinishedForScoring = (match) => {
+  if (match?.status === "encerrado") return true;
+  const stats = readStats(match);
+  const providerStatus = String(stats.espn_status ?? stats.espn_status_detail ?? "").toLowerCase();
+  if (providerStatus.includes("final") || providerStatus.includes("post") || providerStatus.includes("encerr")) {
+    return true;
+  }
+  if (stats.has_final_score === true || stats.hasFinalScore === true) return true;
+  return false;
+};
+
+const isMatchProcessedForPrediction = (prediction, match, now = new Date()) => {
+  if (!match) return false;
+  if (isMatchFinishedForScoring(match)) return true;
+  if (isMatchLiveStatus(match)) return false;
+  if (!isMatchKickoffInPast(match, now)) return false;
+  if (prediction.locked === true) return true;
+  if ((prediction.points ?? 0) > 0) return true;
+  return false;
+};
+
 const getPredictionDisplayStatus = (prediction, match) => {
   if (!match) {
     return "invalid_match";
   }
 
-  if (match.status === "ao_vivo") {
+  if (isMatchProcessedForPrediction(prediction, match)) {
+    return (prediction.points ?? 0) > 0 ? "scored_win" : "scored_zero";
+  }
+
+  if (isMatchLiveStatus(match)) {
     return "live";
   }
 
-  if (match.status !== "encerrado") {
-    return "waiting";
-  }
-
-  if ((prediction.points ?? 0) > 0) {
-    return "scored_win";
-  }
-
-  return "scored_zero";
+  return "waiting";
 };
 
-const getPredictionCategory = (_prediction, match) => {
+const getPredictionCategory = (prediction, match) => {
   if (!match) return "unavailable";
-  if (match.status === "ao_vivo") return "live";
-  if (match.status === "encerrado") return "scored";
+  if (isMatchProcessedForPrediction(prediction, match)) return "scored";
+  if (isMatchLiveStatus(match)) return "live";
   return "waiting";
 };
 
@@ -85,7 +111,7 @@ const deriveUserPerformance = ({ matches, predictions, ranking }) => {
   const matchById = new Map((matches ?? []).map((match) => [match.id, match]));
   const finished = (predictions ?? []).filter((prediction) => {
     const match = matchById.get(prediction.match_id);
-    return match?.status === "encerrado";
+    return match ? isMatchProcessedForPrediction(prediction, match) : false;
   });
 
   const derivedCorrect = finished.filter((prediction) => (prediction.points ?? 0) > 0).length;
@@ -94,6 +120,7 @@ const deriveUserPerformance = ({ matches, predictions, ranking }) => {
 
   return {
     correctResults: ranking?.correct_results ?? derivedCorrect,
+    finishedPredictions: finished.length,
     totalPoints
   };
 };
@@ -199,6 +226,59 @@ const runOfflineScenarios = () => {
       predictions: [{ id: "p10", match_id: "m1", points: 3 }],
       matches,
       expect: { all: 1, scored: 1, category: "scored", tone: "green", label: "Pontuou" }
+    },
+    {
+      name: "palpite processado com match nao encerrado mas locked",
+      predictions: [{
+        id: "p11",
+        match_id: "m4",
+        locked: true,
+        points: 8,
+        predicted_home_score: 1,
+        predicted_away_score: 0
+      }],
+      matches: [...matches, {
+        id: "m4",
+        status: "fechado",
+        start_time: "2026-06-01T18:00:00.000Z"
+      }],
+      expect: { all: 1, scored: 1, status: "scored_win" }
+    },
+    {
+      name: "palpite processado com 0 pts e match espn final",
+      predictions: [{
+        id: "p12",
+        match_id: "m5",
+        locked: true,
+        points: 0,
+        predicted_home_score: 0,
+        predicted_away_score: 0
+      }],
+      matches: [...matches, {
+        id: "m5",
+        status: "ao_vivo",
+        start_time: "2026-06-01T20:00:00.000Z",
+        stats: { espn_status: "STATUS_FINAL" }
+      }],
+      expect: { all: 1, scored: 1, status: "scored_zero" }
+    },
+    {
+      name: "ranking total bate com soma de points processados",
+      predictions: [
+        { id: "p13", match_id: "m1", points: 12 },
+        { id: "p14", match_id: "m1", points: 0 }
+      ],
+      matches,
+      expect: { all: 2, scored: 2, totalPoints: 12, finishedPredictions: 2 }
+    },
+    {
+      name: "contador processados nao usa points > 0",
+      predictions: [
+        { id: "p15", match_id: "m1", points: 0 },
+        { id: "p16", match_id: "m1", points: 5 }
+      ],
+      matches,
+      expect: { all: 2, scored: 2 }
     }
   ];
 
@@ -230,13 +310,18 @@ const runOfflineScenarios = () => {
       assert(formatted === scenario.expect.formatted, `${scenario.name}: date formatting mismatch`);
     }
 
-    if (scenario.expect.totalPoints !== undefined) {
+    if (scenario.expect.totalPoints !== undefined || scenario.expect.finishedPredictions !== undefined) {
       const performance = deriveUserPerformance({
         matches: scenario.matches,
         predictions: scenario.predictions,
         ranking: null
       });
-      assert(performance.totalPoints === scenario.expect.totalPoints, `${scenario.name}: total points mismatch`);
+      if (scenario.expect.totalPoints !== undefined) {
+        assert(performance.totalPoints === scenario.expect.totalPoints, `${scenario.name}: total points mismatch`);
+      }
+      if (scenario.expect.finishedPredictions !== undefined) {
+        assert(performance.finishedPredictions === scenario.expect.finishedPredictions, `${scenario.name}: finished count mismatch`);
+      }
     }
 
     if (scenario.expect.category) {

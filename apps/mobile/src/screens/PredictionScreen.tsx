@@ -9,6 +9,7 @@ import {
   formatDateTimePtBr,
   formatMatchupDisplayName,
   getTeamDisplayName,
+  normalizeTeamNameWithAliases,
   predictionOutcome
 } from "../shared";
 import { AppButton, Card, IconButton, Screen, Subtitle, Title, ToastBanner } from "../components/ui";
@@ -26,7 +27,8 @@ const normalize = (value: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
-const matchTeam = (player: Player, teamName: string) => normalize(player.team_name) === normalize(teamName);
+const matchTeam = (player: Player, teamName: string) =>
+  normalizeTeamNameWithAliases(player.team_name) === normalizeTeamNameWithAliases(teamName);
 
 const isPlaceholderTeam = (teamName: string) =>
   /^(TBD|Winner |Loser |Runner-up |Third Place )/i.test(teamName.trim());

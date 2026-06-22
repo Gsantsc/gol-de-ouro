@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Search, UserRound, X } from "lucide-react";
 import type { Match, Player } from "@gol-de-ouro/shared";
-import { formatMatchupDisplayName, getTeamDisplayName } from "@gol-de-ouro/shared";
+import { formatMatchupDisplayName, getTeamDisplayName, normalizeTeamNameWithAliases } from "@gol-de-ouro/shared";
 
 type PlayerPickerProps = {
   disabled?: boolean;
@@ -23,7 +23,7 @@ const normalize = (value: string) =>
     .toLowerCase();
 
 const matchTeam = (player: Player, teamName: string) =>
-  normalize(player.team_name) === normalize(teamName);
+  normalizeTeamNameWithAliases(player.team_name) === normalizeTeamNameWithAliases(teamName);
 
 const playerLabel = (player?: Player | null) => {
   if (!player) return "Selecionar jogador";

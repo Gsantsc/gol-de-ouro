@@ -461,7 +461,8 @@ const leagueIds: Record<ChampionshipKey, number> = {
 };
 
 // API FOOTBALL FIX - Added date range configuration
-const runSync = async (supabase: SupabaseClient): Promise<SyncSummary> => {
+const runSync = async (supabase: SupabaseClient): Promise<SyncSummary & { startedAt: string; finishedAt: string; durationMs: number }> => {
+  const startedAt = new Date().toISOString();
   logSync("SYNC START");
 
   // Configure seasons for each championship to ensure matches until December 2026
@@ -540,15 +541,28 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary> => {
   const predictionLockMinutes = await readPredictionLockMinutes(supabase);
   let insertedCount = 0;
   let updatedCount = 0;
+  const changedMatches: Array<{ id: string; homeTeam: string; awayTeam: string; action: "inserted" | "updated" }> = [];
 
   for (const providerMatch of providerMatches) {
     const action = await upsertProviderMatch(supabase, provider.name, providerMatch, tournamentCache, predictionLockMinutes);
     if (action === "inserted") {
       insertedCount += 1;
       cacheMisses++;
+      changedMatches.push({
+        id: providerMatch.externalId,
+        homeTeam: providerMatch.homeTeam,
+        awayTeam: providerMatch.awayTeam,
+        action: "inserted"
+      });
     } else {
       updatedCount += 1;
       cacheHits++;
+      changedMatches.push({
+        id: providerMatch.externalId,
+        homeTeam: providerMatch.homeTeam,
+        awayTeam: providerMatch.awayTeam,
+        action: "updated"
+      });
     }
   }
 
@@ -578,6 +592,9 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary> => {
 
   logSync("SYNC SUCCESS");
 
+  const finishedAt = new Date().toISOString();
+  const durationMs = Date.now() - new Date(startedAt).getTime();
+
   return {
     insertedCount,
     providerName: provider.name,
@@ -587,6 +604,9 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary> => {
     lineupsSynced: 0, // TODO: Implement lineups sync
     cacheHits,
     cacheMisses,
+    startedAt,
+    finishedAt,
+    durationMs,
   };
 };
 
@@ -621,10 +641,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Apenas admin aprovado pode sincronizar partidas." }, { status: 403 });
     }
 
-    return NextResponse.json(await runSync(supabase));
+    const result = await runSync(supabase);
+    
+    return NextResponse.json({
+      success: true,
+      action: "sync-matches",
+      provider: result.providerName,
+      status: "success",
+      startedAt: result.startedAt,
+      finishedAt: result.finishedAt,
+      durationMs: result.durationMs,
+      summary: {
+        checkedMatches: result.insertedCount + result.updatedCount,
+        insertedMatches: result.insertedCount,
+        updatedMatches: result.updatedCount,
+        skippedMatches: 0,
+        liveMatches: 0,
+        finishedMatches: 0,
+        scoredPredictions: 0,
+        rankingUpdated: 0,
+        teamsSynced: result.teamsSynced,
+        cacheHits: result.cacheHits,
+        cacheMisses: result.cacheMisses,
+      },
+      changedMatches: [],
+      errors: [],
+    });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Erro ao sincronizar partidas." },
+      { 
+        success: false,
+        action: "sync-matches",
+        error: error instanceof Error ? error.message : "Erro ao sincronizar partidas.",
+      },
       { status: 500 },
     );
   }

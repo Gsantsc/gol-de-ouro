@@ -276,6 +276,18 @@ Resultado: aprovado
 }
 ```
 
+## Caso 6 - standings upsert duplicate payload
+
+Resultado: aprovado
+
+```json
+{
+  "after": 1,
+  "before": 2,
+  "removed": 1
+}
+```
+
 ## Pendencias encontradas
 
 - Nenhuma pendencia encontrada nas simulacoes offline.

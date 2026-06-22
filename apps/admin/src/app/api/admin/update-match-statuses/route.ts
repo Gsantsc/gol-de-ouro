@@ -21,6 +21,14 @@ const createSupabaseForRequest = (accessToken: string) =>
     }
   });
 
+const createServiceSupabaseClient = () =>
+  createClient(requiredEnv("SUPABASE_URL"), requiredEnv("SUPABASE_SERVICE_ROLE_KEY"), {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
+
 export async function POST(request: NextRequest) {
   try {
     const accessToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
@@ -52,11 +60,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Apenas admin aprovado pode atualizar status das partidas." }, { status: 403 });
     }
 
-    // LOCAL MATCH STATUS JOB
-    return NextResponse.json(await updateMatchStatuses(supabase));
+    // LOCAL MATCH STATUS JOB - Use service role after admin validation
+    const serviceSupabase = createServiceSupabaseClient();
+    const result = await updateMatchStatuses(serviceSupabase);
+    
+    return NextResponse.json({
+      success: true,
+      action: "update-match-statuses",
+      status: "success",
+      checkedCount: result.checkedCount,
+      updatedCount: result.updated.length,
+      byStatus: result.byStatus,
+      updated: result.updated,
+    });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Erro ao atualizar status das partidas." },
+      { 
+        success: false,
+        action: "update-match-statuses",
+        error: error instanceof Error ? error.message : "Erro ao atualizar status das partidas.",
+      },
       { status: 500 },
     );
   }

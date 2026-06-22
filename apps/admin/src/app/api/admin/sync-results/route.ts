@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
       force?: boolean;
       provider?: "espn" | "none";
     };
+    const startedAt = new Date().toISOString();
     const supabase = createServiceSupabaseClient();
     const summary = await runLiveResultsSync({
       dryRun: body.dryRun === true,
@@ -75,17 +76,29 @@ export async function POST(request: NextRequest) {
       supabase,
       triggeredBy,
     });
+    const finishedAt = new Date().toISOString();
+    const durationMs = Date.now() - new Date(startedAt).getTime();
 
     const response = {
       success: summary.status === "success" || summary.status === "partial_success",
+      action: "sync-results",
+      provider: body.provider || "espn",
       status: summary.status,
+      startedAt,
+      finishedAt,
+      durationMs,
       summary: {
         checkedMatches: summary.checkedMatches,
+        insertedMatches: 0,
         updatedMatches: summary.updatedMatches,
+        skippedMatches: summary.checkedMatches - summary.updatedMatches,
+        liveMatches: summary.liveMatches || 0,
         finishedMatches: summary.finishedMatches,
         scoredPredictions: summary.scoredPredictions,
+        rankingUpdated: summary.rankingUpdated || 0,
         errorsCount: summary.errors.length
       },
+      changedMatches: [],
       errors: summary.errors.map((error) => ({
         message: error
       }))
@@ -94,7 +107,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(response, { status: response.success ? 200 : 500 });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Erro ao atualizar resultados." },
+      { 
+        success: false,
+        action: "sync-results",
+        error: error instanceof Error ? error.message : "Erro ao atualizar resultados.",
+      },
       { status: 500 },
     );
   }

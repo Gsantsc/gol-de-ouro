@@ -50,12 +50,52 @@ const teamDisplayNamesPtBr: Record<string, string> = {
   "united states": "Estados Unidos",
 };
 
+const teamAliases: Record<string, string> = {
+  "brasil": "brazil",
+  "brazil": "brazil",
+  "estados unidos": "united states",
+  "united states": "united states",
+  "usa": "united states",
+  "usmnt": "united states",
+  "países baixos": "netherlands",
+  "netherlands": "netherlands",
+  "holanda": "netherlands",
+  "japão": "japan",
+  "japan": "japan",
+  "espanha": "spain",
+  "spain": "spain",
+  "arábia saudita": "saudi arabia",
+  "saudi arabia": "saudi arabia",
+  "bélgica": "belgium",
+  "belgium": "belgium",
+  "irã": "iran",
+  "iran": "iran",
+  "frança": "france",
+  "france": "france",
+  "iraque": "iraq",
+  "iraq": "iraq",
+  "portugal": "portugal",
+  "uzbequistão": "uzbekistan",
+  "uzbekistan": "uzbekistan",
+  "austrália": "australia",
+  "australia": "australia",
+  "tunísia": "tunisia",
+  "tunisia": "tunisia",
+  "suécia": "sweden",
+  "sweden": "sweden",
+};
+
 const normalizeTeamName = (value: string) =>
   value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+
+export const normalizeTeamNameWithAliases = (value: string): string => {
+  const normalized = normalizeTeamName(value);
+  return teamAliases[normalized] ?? normalized;
+};
 
 export const getTeamDisplayName = (teamName?: string | null, locale = "pt-BR") => {
   if (!teamName) return "";

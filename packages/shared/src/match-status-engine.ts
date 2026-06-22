@@ -69,13 +69,17 @@ export const resolvePredictionWindow = (
 export const isMatchFinished = (match: MatchStatusInput) => match.status === "encerrado";
 
 export const isMatchLive = (match: MatchStatusInput, now = new Date()) => {
-  if (isMatchFinished(match) || match.status !== "ao_vivo") return false;
+  if (isMatchFinished(match)) return false;
+  if (match.status !== "ao_vivo") return false;
 
   const startAt = readOptionalDate(match.start_time);
   if (!startAt) return false;
 
   const liveWindowEndsAt = new Date(startAt.getTime() + ASSUMED_MATCH_LIVE_WINDOW_MINUTES * MINUTE_MS);
-  return now >= startAt && now <= liveWindowEndsAt;
+  if (now < startAt) return false;
+  if (now > liveWindowEndsAt) return false;
+
+  return true;
 };
 
 export const isMatchOpenForPrediction = (

@@ -4,6 +4,7 @@ import {
   calculatePredictionPoints,
   createEspnProvider,
   espnStatusToMatchStatus,
+  isMatchFinishedForScoring,
   predictionWindowPayload,
   type EspnMatch,
   type MatchStatus,
@@ -315,7 +316,7 @@ const predictionPointsFor = (match: MatchRow, prediction: PredictionRow) =>
   );
 
 const hasUnscoredPrediction = (match: MatchRow, predictionsByMatch: Map<string, PredictionRow[]>) => {
-  if (match.status !== "encerrado") return false;
+  if (!isMatchFinishedForScoring(match)) return false;
   return (predictionsByMatch.get(match.id) ?? []).some(
     (prediction) => Number(prediction.points ?? 0) !== predictionPointsFor(match, prediction),
   );
@@ -382,6 +383,7 @@ const updateLocalStatusWindows = async (
 
   for (const match of matches) {
     if (match.status === "encerrado") continue;
+    
     const windowPayload = predictionWindowPayload(match.start_time, predictionLockMinutes);
     const nextStatus = calculateMatchStatus(
       {
@@ -391,13 +393,14 @@ const updateLocalStatusWindows = async (
       },
       now,
     );
+    
     const needsUpdate =
-      match.status !== nextStatus
-      || match.prediction_open_at !== windowPayload.prediction_open_at
+      match.prediction_open_at !== windowPayload.prediction_open_at
       || match.prediction_close_at !== windowPayload.prediction_close_at;
 
     if (!needsUpdate) continue;
-    await patchMatch(supabase, match, { ...windowPayload, status: nextStatus }, dryRun);
+    
+    await patchMatch(supabase, match, { ...windowPayload }, dryRun);
     updated += 1;
   }
 
@@ -495,7 +498,7 @@ const scoreFinishedMatches = async (
   let scoredPredictions = 0;
 
   for (const match of matches) {
-    if (match.status !== "encerrado") continue;
+    if (!isMatchFinishedForScoring(match)) continue;
 
     for (const prediction of predictionsByMatch.get(match.id) ?? []) {
       const points = predictionPointsFor(match, prediction);

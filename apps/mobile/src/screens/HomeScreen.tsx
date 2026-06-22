@@ -102,6 +102,8 @@ export const HomeScreen = ({
             match={nextMatch}
             onDetails={() => onDetails(nextMatch)}
             onPredict={() => onPredict(nextMatch)}
+            onOpenPredictions={onViewPredictions}
+            predictionActionMode="redirect"
             predictionLockMinutes={predictionLockMinutes}
             prediction={predictions.find((item) => item.match_id === nextMatch.id)}
           />

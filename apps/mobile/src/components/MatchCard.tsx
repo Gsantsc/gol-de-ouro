@@ -52,13 +52,17 @@ const MatchCardBase = ({
   prediction,
   onDetails,
   onPredict,
-  predictionLockMinutes
+  onOpenPredictions,
+  predictionLockMinutes,
+  predictionActionMode = "enabled"
 }: {
   match: Match;
   prediction?: Prediction;
   onDetails: () => void;
   onPredict: () => void;
+  onOpenPredictions?: () => void;
   predictionLockMinutes: number;
+  predictionActionMode?: "enabled" | "redirect" | "hidden";
 }) => {
   const calculatedStatus = calculateMatchStatus(match, new Date(), predictionLockMinutes);
   const predictionAccess = canSubmitPrediction(match, null, new Date(), predictionLockMinutes);
@@ -97,24 +101,46 @@ const MatchCardBase = ({
         </View>
         <View style={[styles.actionRail, canEditOrPredict && styles.actionRailOpen, prediction && styles.actionRailLocked]}>
           <Text style={styles.railLabel}>{actionLabel}</Text>
-          {prediction ? (
+          {predictionActionMode === "hidden" ? null : predictionActionMode === "redirect" ? (
             <>
-              <Text style={styles.predictionScore}>Enviado</Text>
-              <Text style={styles.railHint}>detalhes em Palpites</Text>
-              {canEditOrPredict ? (
-                <Pressable accessibilityRole="button" onPress={onPredict} style={styles.predictCta}>
-                  <Text style={styles.predictCtaText}>Editar</Text>
-                </Pressable>
+              {prediction ? (
+                <>
+                  <Text style={styles.predictionScore}>Enviado</Text>
+                  <Text style={styles.railHint}>detalhes em Palpites</Text>
+                </>
+              ) : canEditOrPredict ? (
+                <Text style={styles.railHint}>disponível</Text>
               ) : (
-                <Text style={styles.railHint}>fechado</Text>
+                <Text style={styles.closedLabel}>offline</Text>
+              )}
+              {onOpenPredictions && (
+                <Pressable accessibilityRole="button" onPress={onOpenPredictions} style={styles.predictCta}>
+                  <Text style={styles.predictCtaText}>Ir para Palpites</Text>
+                </Pressable>
               )}
             </>
-          ) : canEditOrPredict ? (
-            <Pressable accessibilityRole="button" onPress={onPredict} style={styles.predictCta}>
-              <Text style={styles.predictCtaText}>Palpitar</Text>
-            </Pressable>
           ) : (
-            <Text style={styles.closedLabel}>offline</Text>
+            <>
+              {prediction ? (
+                <>
+                  <Text style={styles.predictionScore}>Enviado</Text>
+                  <Text style={styles.railHint}>detalhes em Palpites</Text>
+                  {canEditOrPredict ? (
+                    <Pressable accessibilityRole="button" onPress={onPredict} style={styles.predictCta}>
+                      <Text style={styles.predictCtaText}>Editar</Text>
+                    </Pressable>
+                  ) : (
+                    <Text style={styles.railHint}>fechado</Text>
+                  )}
+                </>
+              ) : canEditOrPredict ? (
+                <Pressable accessibilityRole="button" onPress={onPredict} style={styles.predictCta}>
+                  <Text style={styles.predictCtaText}>Palpitar</Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.closedLabel}>offline</Text>
+              )}
+            </>
           )}
         </View>
       </View>

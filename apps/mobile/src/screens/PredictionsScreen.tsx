@@ -1,34 +1,19 @@
-import { StyleSheet, Text, View } from "react-native";
-import { CheckCircle2, Clock3, Target } from "lucide-react-native";
-import type { Match, Player, Prediction, PredictionWinner, Ranking } from "../shared";
+import { useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { CheckCircle2, Clock3, RadioTower, Target } from "lucide-react-native";
+import type { Match, Player, Prediction, Ranking } from "../shared";
 import {
   deriveUserPerformance,
   formatDateTimePtBr,
-  formatMatchupDisplayName,
   getPredictionCategory,
   getPredictionDisplayStatus,
-  getPredictionStatusLabel,
-  getPredictionStatusTone,
-  getTeamDisplayName
+  type PredictionCategory
 } from "../shared";
-import { Card, EmptyState, MetricTile, Pill, ScreenScroll, SectionTitle } from "../components/ui";
-import { TeamFlag } from "../components/TeamFlag";
+import { PredictionCard } from "../components/PredictionCard";
+import { Card, EmptyState, MetricTile, ScreenScroll, SectionTitle } from "../components/ui";
 import { colors, radius, spacing } from "../theme/tokens";
 
-const winnerLabel = (winner?: PredictionWinner | null, match?: Match | null) => {
-  if (winner === "home") return getTeamDisplayName(match?.home_team) || "Casa";
-  if (winner === "away") return getTeamDisplayName(match?.away_team) || "Visitante";
-  if (winner === "draw") return "Empate";
-  return "-";
-};
-
-const boolLabel = (value?: boolean | null) => {
-  if (value === true) return "Sim";
-  if (value === false) return "Nao";
-  return "-";
-};
-
-const marketText = (value?: string | null) => value?.trim() || "-";
+type CategoryFilter = "all" | PredictionCategory;
 
 const safeFormatDateTime = (value?: string | null) => {
   if (!value) return "Data indisponivel";
@@ -39,6 +24,14 @@ const safeFormatDateTime = (value?: string | null) => {
 
 const getPredictionMatch = (prediction: Prediction, matches: Match[]) =>
   matches.find((item) => item.id === prediction.match_id) ?? null;
+
+const categoryFilters: Array<{ id: CategoryFilter; label: string }> = [
+  { id: "all", label: "Todos" },
+  { id: "scored", label: "Pontuados" },
+  { id: "waiting", label: "Aguardando" },
+  { id: "live", label: "Ao vivo" },
+  { id: "unavailable", label: "Indisponiveis" }
+];
 
 export const PredictionsScreen = ({
   matches,
@@ -52,6 +45,8 @@ export const PredictionsScreen = ({
   predictions: Prediction[];
   ranking: Ranking | null;
 }) => {
+  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>("all");
+
   const safeMatches = Array.isArray(matches) ? matches : [];
   const safePlayers = Array.isArray(players) ? players : [];
   const safePredictions = Array.isArray(predictions) ? predictions : [];
@@ -62,134 +57,107 @@ export const PredictionsScreen = ({
     ranking
   });
   const playerById = new Map(safePlayers.map((player) => [player.id, player]));
-  const rows = safePredictions.map((prediction) => {
-    const match = getPredictionMatch(prediction, safeMatches);
-    const displayStatus = getPredictionDisplayStatus(prediction, match);
-    const category = getPredictionCategory(prediction, match);
 
-    return { category, displayStatus, match, prediction };
-  });
+  const rows = useMemo(
+    () => safePredictions.map((prediction) => {
+      const match = getPredictionMatch(prediction, safeMatches);
+      return {
+        category: getPredictionCategory(prediction, match),
+        displayStatus: getPredictionDisplayStatus(prediction, match),
+        match,
+        prediction
+      };
+    }),
+    [safeMatches, safePredictions]
+  );
 
-  const allCount = rows.length;
-  const scoredCount = rows.filter((row) => row.category === "scored").length;
-  const waitingCount = rows.filter((row) => row.category === "waiting").length;
-  const liveCount = rows.filter((row) => row.category === "live").length;
-  const unavailableCount = rows.filter((row) => row.category === "unavailable").length;
+  const counts = useMemo(() => ({
+    all: rows.length,
+    live: rows.filter((row) => row.category === "live").length,
+    scored: rows.filter((row) => row.category === "scored").length,
+    unavailable: rows.filter((row) => row.category === "unavailable").length,
+    waiting: rows.filter((row) => row.category === "waiting").length
+  }), [rows]);
 
-  const sections = [
-    { title: "Todos", count: allCount, filter: () => rows },
-    { title: "Pontuados", count: scoredCount, filter: () => rows.filter((row) => row.category === "scored") },
-    { title: "Aguardando", count: waitingCount, filter: () => rows.filter((row) => row.category === "waiting") },
-    { title: "Ao vivo", count: liveCount, filter: () => rows.filter((row) => row.category === "live") },
-    ...(unavailableCount > 0
-      ? [{
-          title: "Indisponiveis",
-          count: unavailableCount,
-          filter: () => rows.filter((row) => row.category === "unavailable")
-        }]
-      : [])
-  ];
+  const visibleFilters = categoryFilters.filter((filter) =>
+    filter.id !== "unavailable" || counts.unavailable > 0
+  );
+
+  const filteredRows = useMemo(() => {
+    if (selectedCategory === "all") return rows;
+    return rows.filter((row) => row.category === selectedCategory);
+  }, [rows, selectedCategory]);
 
   return (
     <ScreenScroll>
       <SectionTitle title="Meus Palpites" />
+
       <View style={styles.metrics}>
         <MetricTile icon={<Target color={colors.green} size={18} />} label="Enviados" value={safePredictions.length} />
-        <MetricTile
-          icon={<CheckCircle2 color={colors.gold} size={18} />}
-          label="Processados"
-          tone="gold"
-          value={scoredCount}
-        />
+        <MetricTile icon={<CheckCircle2 color={colors.gold} size={18} />} label="Processados" tone="gold" value={counts.scored} />
         <MetricTile icon={<Clock3 color={colors.blue} size={18} />} label="Pontos" tone="blue" value={performance.totalPoints} />
+        <MetricTile icon={<RadioTower color={colors.gold} size={18} />} label="Aguardando" tone="gold" value={counts.waiting} />
       </View>
 
       {safePredictions.length ? (
-        sections.map((section) => {
-          const sectionRows = section.filter();
+        <>
+          <ScrollView
+            contentContainerStyle={styles.filterRow}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {visibleFilters.map((filter) => {
+              const active = selectedCategory === filter.id;
+              const count = counts[filter.id];
 
-          return (
-            <View key={section.title} style={styles.section}>
-              <SectionTitle title={`${section.title}: ${section.count}`} />
-              <Card>
-                {sectionRows.length ? (
-                  sectionRows.map(({ match, prediction, displayStatus }) => {
-                    const statusLabel = getPredictionStatusLabel(displayStatus);
-                    const statusTone = getPredictionStatusTone(displayStatus);
-                    const matchDate = match?.start_time ?? prediction.submitted_at;
+              return (
+                <Pressable
+                  key={filter.id}
+                  accessibilityRole="button"
+                  onPress={() => setSelectedCategory(filter.id)}
+                  style={[styles.filterChip, active && styles.filterChipActive]}
+                >
+                  <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                    {filter.label}
+                  </Text>
+                  <View style={[styles.filterChipBadge, active && styles.filterChipBadgeActive]}>
+                    <Text style={[styles.filterChipCount, active && styles.filterChipCountActive]}>{count}</Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
-                    return (
-                      <View key={prediction.id} style={styles.row}>
-                        <View style={styles.content}>
-                          {match ? (
-                            <View style={styles.matchRow}>
-                              <TeamFlag logoUrl={match.home_team_logo_url} name={match.home_team} size={22} />
-                              <Text numberOfLines={2} style={styles.match}>
-                                {formatMatchupDisplayName(match.home_team, match.away_team)}
-                              </Text>
-                              <TeamFlag logoUrl={match.away_team_logo_url} name={match.away_team} size={22} />
-                            </View>
-                          ) : (
-                            <Text numberOfLines={2} style={styles.match}>Partida indisponivel</Text>
-                          )}
-                          <Text style={styles.date}>{safeFormatDateTime(matchDate)}</Text>
-                          <View style={styles.status}>
-                            <Pill tone={statusTone}>{statusLabel}</Pill>
-                          </View>
-                          <View style={styles.detailsGrid}>
-                            <PredictionDetail label="Vencedor" value={winnerLabel(prediction.predicted_winner, match)} />
-                            <PredictionDetail
-                              label="Primeiro gol"
-                              value={
-                                prediction.predicted_first_goal_no_goals
-                                  ? "Sem gols"
-                                  : playerById.get(prediction.predicted_first_scorer_id ?? "")?.name
-                                    ?? marketText(prediction.predicted_first_scorer)
-                              }
-                            />
-                            <PredictionDetail label="Ambos" value={boolLabel(prediction.predicted_both_teams_score)} />
-                            <PredictionDetail
-                              label="MVP"
-                              value={
-                                playerById.get(prediction.predicted_man_of_match_id ?? "")?.name
-                                  ?? marketText(prediction.predicted_man_of_match)
-                              }
-                            />
-                            <PredictionDetail label="Vermelho" value={boolLabel(prediction.predicted_red_card)} />
-                          </View>
-                        </View>
-                        <View style={styles.scoreBox}>
-                          <Text style={styles.score}>
-                            {prediction.predicted_home_score ?? "-"} x {prediction.predicted_away_score ?? "-"}
-                          </Text>
-                          <Text style={styles.points}>{prediction.points ?? 0} pts</Text>
-                        </View>
-                      </View>
-                    );
-                  })
-                ) : (
-                  <Text style={styles.emptyText}>Nenhum palpite nesta categoria.</Text>
-                )}
-              </Card>
+          {filteredRows.length ? (
+            <View style={styles.cardsList}>
+              {filteredRows.map(({ match, prediction, displayStatus }) => (
+                <PredictionCard
+                  key={prediction.id}
+                  displayStatus={displayStatus}
+                  formattedDate={safeFormatDateTime(match?.start_time ?? prediction.submitted_at)}
+                  match={match}
+                  playerById={playerById}
+                  prediction={prediction}
+                />
+              ))}
             </View>
-          );
-        })
+          ) : (
+            <Card variant="soft">
+              <Text style={styles.emptyText}>Nenhum palpite nesta categoria.</Text>
+            </Card>
+          )}
+        </>
       ) : (
         <EmptyState
           title="Sem palpites"
           body="Quando voce enviar um palpite, ele aparece aqui com placar, status e pontos."
         />
       )}
+
+      <View style={styles.bottomSpacer} />
     </ScreenScroll>
   );
 };
-
-const PredictionDetail = ({ label, value }: { label: string; value: string }) => (
-  <View style={styles.detail}>
-    <Text style={styles.detailLabel}>{label}</Text>
-    <Text numberOfLines={2} style={styles.detailValue}>{value}</Text>
-  </View>
-);
 
 const styles = StyleSheet.create({
   metrics: {
@@ -197,96 +165,62 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: spacing.sm
   },
-  section: {
-    gap: spacing.xs
-  },
-  row: {
-    alignItems: "flex-start",
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.md,
-    minHeight: 78,
-    paddingVertical: spacing.sm
-  },
-  content: {
-    flex: 1,
-    minWidth: 0
-  },
-  matchRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.xs
-  },
-  match: {
-    color: colors.text,
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "900"
-  },
-  date: {
-    color: colors.muted,
-    fontSize: 12,
-    marginTop: 4
-  },
-  status: {
-    marginTop: spacing.xs
-  },
-  detailsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  filterRow: {
     gap: spacing.xs,
-    marginTop: spacing.sm
-  },
-  detail: {
-    backgroundColor: "rgba(11, 15, 25, 0.36)",
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    flexGrow: 1,
-    flexShrink: 1,
-    minWidth: 94,
-    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs
   },
-  detailLabel: {
-    color: colors.muted,
-    fontSize: 10,
-    fontWeight: "900",
-    textTransform: "uppercase"
-  },
-  detailValue: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 2
-  },
-  scoreBox: {
-    alignItems: "flex-end",
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.035)",
+  filterChip: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceDeep,
     borderColor: colors.border,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    flexShrink: 0,
-    gap: 2,
-    minWidth: 72,
+    flexDirection: "row",
+    gap: spacing.xs,
+    marginRight: spacing.xs,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
   },
-  score: {
-    color: colors.gold,
-    fontSize: 20,
+  filterChipActive: {
+    backgroundColor: colors.goldSoft,
+    borderColor: colors.borderGoldStrong
+  },
+  filterChipText: {
+    color: colors.mutedStrong,
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  filterChipTextActive: {
+    color: colors.text
+  },
+  filterChipBadge: {
+    alignItems: "center",
+    backgroundColor: colors.whiteSoft,
+    borderRadius: radius.pill,
+    justifyContent: "center",
+    minWidth: 24,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2
+  },
+  filterChipBadgeActive: {
+    backgroundColor: "rgba(5, 7, 13, 0.42)"
+  },
+  filterChipCount: {
+    color: colors.muted,
+    fontSize: 11,
     fontWeight: "900"
   },
-  points: {
-    color: colors.green,
-    fontSize: 12,
-    fontWeight: "900"
+  filterChipCountActive: {
+    color: colors.gold
+  },
+  cardsList: {
+    gap: spacing.sm
   },
   emptyText: {
     color: colors.muted,
     lineHeight: 21
+  },
+  bottomSpacer: {
+    height: spacing.xl
   }
 });

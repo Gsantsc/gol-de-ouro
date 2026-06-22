@@ -340,7 +340,7 @@ export const styles = StyleSheet.create({
   },
   screenContent: {
     gap: spacing.md,
-    paddingBottom: 80
+    paddingBottom: 104
   },
   container: {
     alignSelf: "center",

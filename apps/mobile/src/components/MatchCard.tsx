@@ -7,7 +7,9 @@ import {
   canSubmitPrediction,
   formatDateTimePtBr,
   getTeamDisplayName,
-  MATCH_STATUS_LABELS
+  MATCH_STATUS_LABELS,
+  resolveFlagUrl,
+  getTeamInitials
 } from "../shared";
 import { colors, radius, spacing } from "../theme/tokens";
 import { Pill } from "./ui";
@@ -18,55 +20,6 @@ const statusTone = {
   ao_vivo: "red",
   encerrado: "gold"
 } as const;
-
-const normalizeName = (value: string) =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-
-const countryCodes: Record<string, string> = {
-  algeria: "dz",
-  argentina: "ar",
-  australia: "au",
-  austria: "at",
-  belgium: "be",
-  "bosnia-herzegovina": "ba",
-  brazil: "br",
-  canada: "ca",
-  "cabo verde": "cv",
-  "cote d'ivoire": "ci",
-  curacao: "cw",
-  czechia: "cz",
-  ecuador: "ec",
-  egypt: "eg",
-  france: "fr",
-  germany: "de",
-  haiti: "ht",
-  "ir iran": "ir",
-  iraq: "iq",
-  japan: "jp",
-  jordan: "jo",
-  "korea republic": "kr",
-  mexico: "mx",
-  morocco: "ma",
-  netherlands: "nl",
-  "new zealand": "nz",
-  norway: "no",
-  paraguay: "py",
-  qatar: "qa",
-  "saudi arabia": "sa",
-  scotland: "gb-sct",
-  senegal: "sn",
-  "south africa": "za",
-  spain: "es",
-  sweden: "se",
-  switzerland: "ch",
-  tunisia: "tn",
-  turkey: "tr",
-  uruguay: "uy",
-  usa: "us"
-};
 
 const stadiumCities: Record<string, string> = {
   "at&t stadium": "Arlington",
@@ -86,10 +39,11 @@ const stadiumCities: Record<string, string> = {
   "sofi stadium": "Los Angeles"
 };
 
-const flagUrlForTeam = (name: string) => {
-  const code = countryCodes[normalizeName(name)];
-  return code ? `https://flagcdn.com/w80/${code}.png` : null;
-};
+const normalizeName = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 
 const cityForStadium = (stadium?: string | null) =>
   stadium ? stadiumCities[normalizeName(stadium)] ?? null : null;
@@ -203,13 +157,8 @@ const TeamLine = ({
   logoUrl?: string | null;
   score: number;
 }) => {
-  const initials = name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-  const flagUrl = logoUrl || flagUrlForTeam(name);
+  const initials = getTeamInitials(name);
+  const flagUrl = logoUrl || resolveFlagUrl(name);
   const displayName = getTeamDisplayName(name);
 
   return (

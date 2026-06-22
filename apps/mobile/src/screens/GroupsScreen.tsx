@@ -76,7 +76,7 @@ export const GroupsScreen = ({
     const clipboard = globalThis.navigator?.clipboard;
     if (clipboard?.writeText) {
       await clipboard.writeText(link);
-      setToast({ message: "Link copiado.", tone: "success" });
+      setToast({ message: "Link copiado", tone: "success" });
       return;
     }
 

@@ -470,7 +470,7 @@ export type SyncResultsSummary = {
   scoredPredictions: number;
   startedAt: string;
   standingsUpdated: number;
-  status: "success" | "failed";
+  status: "success" | "partial_success" | "failed";
   triggeredBy: string;
   updatedMatches: number;
 };

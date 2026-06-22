@@ -94,5 +94,7 @@ export const createMatchesProvider = ({
     };
   }
 
+  if (providerName === "static-wc2026") return staticWC2026Provider;
+
   return localMatchesProvider;
 };

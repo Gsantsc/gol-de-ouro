@@ -1,6 +1,7 @@
 import type { ChampionshipKey, MatchStatus } from "../../types";
 
 export type ProviderMatchStats = {
+  [key: string]: unknown;
   possessionHome: number;
   possessionAway: number;
   shotsHome: number;

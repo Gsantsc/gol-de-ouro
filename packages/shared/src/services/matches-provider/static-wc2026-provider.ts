@@ -1,4 +1,5 @@
 import type { MatchesProvider, ProviderMatch, ProviderMatchStats } from "./types";
+import { staticWC2026Fixtures } from "./static-wc2026-data";
 
 const defaultStats = (): ProviderMatchStats => ({
   possessionAway: 50,
@@ -19,42 +20,37 @@ const defaultStats = (): ProviderMatchStats => ({
   yellowCardsHome: 0,
 });
 
-const fallbackFixtures: ProviderMatch[] = [
-  {
-    awayLogoUrl: null,
-    awayScore: 0,
-    awayTeam: "South Africa",
-    championship: "world_cup_2026",
-    events: [],
-    externalId: "static-wc2026-mexico-south-africa",
-    hasFinalScore: false,
-    homeLogoUrl: null,
-    homeScore: 0,
-    homeTeam: "Mexico",
-    kickoff: "2026-06-11T16:00:00.000Z",
-    round: "Grupo A",
-    stadium: "Estadio a confirmar",
-    status: "fechado",
-    stats: defaultStats(),
+const fallbackFixtures: ProviderMatch[] = staticWC2026Fixtures.map((fixture) => ({
+  awayLogoUrl: null,
+  awayScore: 0,
+  awayTeam: fixture.awayTeam,
+  championship: "world_cup_2026",
+  events: [],
+  externalId: fixture.externalId,
+  hasFinalScore: false,
+  homeLogoUrl: null,
+  homeScore: 0,
+  homeTeam: fixture.homeTeam,
+  kickoff: fixture.kickoff,
+  round: fixture.round,
+  stadium: fixture.stadium,
+  status: "fechado",
+  stats: {
+    ...defaultStats(),
+    city: fixture.city,
+    country: fixture.country,
+    espn_event_id: fixture.eventId,
+    group: fixture.group,
+    kickoff_brt: fixture.kickoffBrt,
+    kickoff_local: fixture.kickoffLocal,
+    match_number: fixture.matchNumber,
+    source: fixture.source,
+    source_away_team: fixture.sourceAwayTeam,
+    source_home_team: fixture.sourceHomeTeam,
+    stage: fixture.stage,
+    venue_timezone: fixture.venueTimezone,
   },
-  {
-    awayLogoUrl: null,
-    awayScore: 0,
-    awayTeam: "Czechia",
-    championship: "world_cup_2026",
-    events: [],
-    externalId: "static-wc2026-korea-republic-czechia",
-    hasFinalScore: false,
-    homeLogoUrl: null,
-    homeScore: 0,
-    homeTeam: "Korea Republic",
-    kickoff: "2026-06-11T23:00:00.000Z",
-    round: "Grupo",
-    stadium: "Estadio a confirmar",
-    status: "fechado",
-    stats: defaultStats(),
-  },
-];
+}));
 
 export const staticWC2026Provider: MatchesProvider = {
   name: "static-wc2026",

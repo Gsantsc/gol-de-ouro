@@ -3,7 +3,9 @@ import { AlertCircle } from "lucide-react-native";
 import { AppButton, Card, Screen, Subtitle, Title } from "./ui";
 import { colors } from "../theme/tokens";
 
-type Props = { children: ReactNode };
+type DebugContext = Record<string, string | number | boolean | null | undefined>;
+
+type Props = { children: ReactNode; debugContext?: DebugContext };
 type State = { errorMessage?: string; hasError: boolean };
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -17,15 +19,18 @@ export class ErrorBoundary extends Component<Props, State> {
     const errorMessage = error instanceof Error ? error.message : String(error);
     this.setState({ errorMessage });
 
+    const payload = {
+      ...(this.props.debugContext ?? {}),
+      componentStack: info.componentStack,
+      error,
+      errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    };
+
     if (__DEV__) {
-      console.error("[APP ERROR BOUNDARY]", {
-        componentStack: info.componentStack,
-        error,
-        errorMessage,
-        stack: error instanceof Error ? error.stack : undefined
-      });
+      console.error("[APP ERROR BOUNDARY]", payload);
     } else {
-      console.error("[APP ERROR BOUNDARY]", errorMessage);
+      console.error("[APP ERROR BOUNDARY]", errorMessage, payload);
     }
   }
 

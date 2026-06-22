@@ -47,9 +47,26 @@ const ensureTournament = async (dataset) => {
   return created[0];
 };
 
+const legacyStaticExternalIds = (matchNumber) => {
+  const padded = String(matchNumber).padStart(3, "0");
+  const legacy = [`static-wc2026-${padded}`];
+  if (matchNumber === 1) legacy.push("static-wc2026-mexico-south-africa");
+  if (matchNumber === 2) legacy.push("static-wc2026-korea-republic-czechia");
+  return legacy;
+};
+
 const findExistingMatch = async (providerName, providerExternalId, matchNumber, championship) => {
   const rows = await rest(`matches?select=*&provider_name=eq.${providerName}&provider_external_id=eq.${encodeURIComponent(providerExternalId)}&limit=1`);
   if (rows?.[0]) return rows[0];
+
+  if (providerName === "static-wc2026") {
+    for (const legacyExternalId of legacyStaticExternalIds(matchNumber)) {
+      const legacyRows = await rest(
+        `matches?select=*&provider_name=eq.${providerName}&provider_external_id=eq.${encodeURIComponent(legacyExternalId)}&limit=1`,
+      );
+      if (legacyRows?.[0]) return legacyRows[0];
+    }
+  }
 
   const byNumber = await rest(
     `matches?select=*&provider_name=eq.${providerName}&championship=eq.${championship}&stats->>match_number=eq.${matchNumber}&limit=1`,

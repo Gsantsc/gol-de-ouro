@@ -309,12 +309,20 @@ const AppContent = () => {
   const openPrediction = (match: Match) => setOverlay({ type: "prediction", match });
 
   return (
-    <AppViewport
-      footer={<BottomTabs activeTab={activeTab} onChange={setActiveTab} />}
-      toast={toast ? <ToastBanner message={toast.message} tone={toast.tone} /> : null}
+    <ErrorBoundary
+      debugContext={{
+        activeTab,
+        matchesCount: matches.length,
+        playersCount: players.length,
+        predictionsCount: predictions.length
+      }}
     >
-      <InstallPwaPrompt />
-      {loading ? (
+      <AppViewport
+        footer={<BottomTabs activeTab={activeTab} onChange={setActiveTab} />}
+        toast={toast ? <ToastBanner message={toast.message} tone={toast.tone} /> : null}
+      >
+        <InstallPwaPrompt />
+        {loading ? (
         <ScreenScroll>
           <Skeleton count={6} height={92} />
         </ScreenScroll>
@@ -384,7 +392,8 @@ const AppContent = () => {
           ranking={myRanking}
         />
       )}
-    </AppViewport>
+      </AppViewport>
+    </ErrorBoundary>
   );
 };
 

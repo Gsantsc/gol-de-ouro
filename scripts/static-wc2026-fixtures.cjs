@@ -4,20 +4,31 @@ const path = require("path");
 const HOUR_MS = 60 * 60 * 1000;
 const DATASET_PATH = path.resolve(__dirname, "..", "data", "world-cup-2026.json");
 
-const readOpeningFixtures = () => {
+const readFixtures = () => {
   const dataset = JSON.parse(fs.readFileSync(DATASET_PATH, "utf8"));
-  return (dataset.matches ?? []).slice(0, 2).map((match) => ({
+  return (dataset.matches ?? []).map((match) => ({
     away_team: match.away_team,
+    city: match.city,
+    country: match.country,
+    event_id: match.event_id,
+    group: match.group,
     home_team: match.home_team,
+    kickoff_brt: match.kickoff_brt,
+    kickoff_local: match.kickoff_local,
+    match_number: match.match_number,
     provider_external_id: match.provider_external_id,
     round: match.round,
+    source: match.source,
+    source_away_team: match.source_away_team,
+    source_home_team: match.source_home_team,
+    stage: match.stage,
     stadium: match.venue,
     start_time: match.kickoff_utc,
     venue_timezone: match.venue_timezone,
   }));
 };
 
-const staticWC2026Fixtures = readOpeningFixtures();
+const staticWC2026Fixtures = readFixtures();
 
 const defaultStats = () => ({
   cornersAway: 0,
@@ -76,7 +87,17 @@ const staticWC2026Payloads = (tournamentId) =>
     start_time_utc: fixture.start_time,
     stats: {
       ...defaultStats(),
-      source: "espn_fifa_world_cup_scoreboard",
+      city: fixture.city,
+      country: fixture.country,
+      espn_event_id: fixture.event_id,
+      group: fixture.group,
+      kickoff_brt: fixture.kickoff_brt,
+      kickoff_local: fixture.kickoff_local,
+      match_number: fixture.match_number,
+      source: fixture.source ?? "espn_fifa_world_cup_scoreboard",
+      source_away_team: fixture.source_away_team,
+      source_home_team: fixture.source_home_team,
+      stage: fixture.stage,
       venue_timezone: fixture.venue_timezone,
     },
     status: calculateStatus(fixture.start_time),

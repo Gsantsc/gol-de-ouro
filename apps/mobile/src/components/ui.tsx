@@ -340,7 +340,7 @@ export const styles = StyleSheet.create({
   },
   screenContent: {
     gap: spacing.md,
-    paddingBottom: spacing.lg
+    paddingBottom: 80
   },
   container: {
     alignSelf: "center",
@@ -565,11 +565,11 @@ export const styles = StyleSheet.create({
   },
   toastFloating: {
     alignSelf: "center",
+    bottom: spacing.xl,
     left: spacing.md,
     maxWidth: 620,
     position: "absolute",
     right: spacing.md,
-    top: spacing.lg,
     zIndex: 20
   },
   toastInline: {

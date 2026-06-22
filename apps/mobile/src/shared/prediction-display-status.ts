@@ -4,7 +4,6 @@ export type PredictionDisplayStatus =
   | "waiting"
   | "live"
   | "scored_win"
-  | "scored_partial"
   | "scored_zero"
   | "invalid_match";
 
@@ -43,8 +42,6 @@ export const getPredictionStatusLabel = (status: PredictionDisplayStatus): strin
       return "Ao vivo";
     case "scored_win":
       return "Pontuou";
-    case "scored_partial":
-      return "Acertou parcialmente";
     case "scored_zero":
       return "0 pts";
     case "invalid_match":
@@ -60,8 +57,6 @@ export const getPredictionStatusTone = (status: PredictionDisplayStatus): Predic
       return "blue";
     case "scored_win":
       return "green";
-    case "scored_partial":
-      return "gold";
     case "scored_zero":
       return "red";
     case "invalid_match":

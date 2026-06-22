@@ -23,7 +23,7 @@ export type PredictionAccessResult = {
 export const predictionAccessMessages = {
   closed: "Palpites encerrados para esta partida.",
   notApproved: "Apenas usuarios aprovados podem enviar palpites.",
-  notOpen: "Palpites abrem 24h antes do jogo.",
+  notOpen: "Palpites abrem 24h antes da partida.",
   open: "Palpite permitido.",
   pastClose: "Palpites encerrados para esta partida."
 } as const;

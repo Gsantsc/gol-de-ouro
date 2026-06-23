@@ -1,14 +1,31 @@
 // Audit script to check for invalid prediction players
 // Usage: node scripts/audit-invalid-prediction-players.cjs [--fix]
 
-const { createClient } = require("@supabase/supabase-js");
-const requiredEnv = (name) => {
-  const value = process.env[name];
-  if (!value) throw new Error(`Variável ${name} não configurada.`);
-  return value;
+const { getSupabaseUrl, getSupabaseServiceKey } = require("./env.cjs");
+
+const SUPABASE_URL = getSupabaseUrl();
+const SUPABASE_SERVICE_KEY = getSupabaseServiceKey();
+
+const headers = {
+  apikey: SUPABASE_SERVICE_KEY,
+  Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+  "Content-Type": "application/json",
 };
 
-const supabase = createClient(requiredEnv("NEXT_PUBLIC_SUPABASE_URL"), requiredEnv("SUPABASE_SERVICE_ROLE_KEY"));
+const readJson = async (response) => {
+  const text = await response.text();
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${text}`);
+  return text ? JSON.parse(text) : null;
+};
+
+const rest = async (path, options = {}) => {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: { ...headers, ...options.headers },
+    body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body,
+  });
+  return readJson(response);
+};
 
 const normalizeTeamName = (value) =>
   value
@@ -80,30 +97,15 @@ const main = async () => {
   console.log(fix ? "🔧 Modo de correção ativado" : "🔍 Modo de auditoria (dry-run)");
 
   console.log("📊 Buscando predictions...");
-  const { data: predictions, error: predictionsError } = await supabase
-    .from("predictions")
-    .select("id, user_id, match_id, predicted_first_scorer_id, predicted_man_of_match_id")
-    .is("deleted_at", null);
-
-  if (predictionsError) throw predictionsError;
+  const predictions = await rest("predictions?select=id,user_id,match_id,predicted_first_scorer_id,predicted_man_of_match_id");
   console.log(`✅ Encontradas ${predictions.length} predictions`);
 
   console.log("📊 Buscando matches...");
-  const { data: matches, error: matchesError } = await supabase
-    .from("matches")
-    .select("id, home_team, away_team")
-    .is("deleted_at", null);
-
-  if (matchesError) throw matchesError;
+  const matches = await rest("matches?select=id,home_team,away_team");
   console.log(`✅ Encontrados ${matches.length} matches`);
 
   console.log("📊 Buscando players...");
-  const { data: players, error: playersError } = await supabase
-    .from("players")
-    .select("id, team_code, team_name")
-    .is("deleted_at", null);
-
-  if (playersError) throw playersError;
+  const players = await rest("players?select=id,team_code,team_name");
   console.log(`✅ Encontrados ${players.length} players`);
 
   const matchById = new Map(matches.map((m) => [m.id, m]));
@@ -193,16 +195,17 @@ const main = async () => {
       }
 
       if (needsUpdate) {
-        const { error } = await supabase
-          .from("predictions")
-          .update(updates)
-          .eq("id", prediction.id);
-
-        if (error) {
-          console.error(`❌ Erro ao corrigir prediction ${prediction.id}:`, error.message);
-        } else {
-          fixedCount++;
+        const updateFields = [];
+        if (updates.predicted_first_scorer_id !== undefined) {
+          updateFields.push(`predicted_first_scorer_id = NULL`);
         }
+        if (updates.predicted_man_of_match_id !== undefined) {
+          updateFields.push(`predicted_man_of_match_id = NULL`);
+        }
+
+        console.log(`-- Prediction ${prediction.id}: ${match.home_team} x ${match.away_team}`);
+        console.log(`UPDATE predictions SET ${updateFields.join(", ")} WHERE id = '${prediction.id}';`);
+        fixedCount++;
       }
     }
 

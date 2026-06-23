@@ -91,21 +91,21 @@ export const calculatePredictionPoints = (
     && official.redCard !== undefined
     && prediction.redCard === official.redCard;
 
-  let points = 0;
-  if (exact) points += 10;
+let points = 0;
+
+if (exact) {
+  points += 10;
+} else {
   if (sameOutcome) points += 5;
   if (sameGoalDifference) points += 3;
-  if (firstScorer) points += 8;
-  if (bothTeamsScore) points += 2;
-  if (manOfMatch) points += 6;
-  if (redCard) points += 2;
+}
 
-  if (exact && firstScorer) points += 10;
-  if (exact && sameOutcome && sameGoalDifference && firstScorer && bothTeamsScore && manOfMatch && redCard) {
-    points += 20;
-  }
+if (firstScorer) points += 8;
+if (bothTeamsScore) points += 2;
+if (manOfMatch) points += 6;
+if (redCard) points += 2;
 
-  return points;
+return points;
 };
 
 export const isExactScore = (official: ScoreInput, prediction: ScoreInput) =>

@@ -4,6 +4,7 @@ import {
   isMatchFinishedForScoring,
   isMatchLiveStatus,
   isMatchProcessableForRecalculate,
+  predictionOutcome,
   type MatchStatus,
   type PredictionWinner,
 } from "@gol-de-ouro/shared";
@@ -251,7 +252,24 @@ export const runRecalculatePredictions = async ({
 
       const userPredictions = predictionsByUser.get(user.id) ?? [];
       const totalPoints = userPredictions.reduce((sum, prediction) => sum + Number(prediction.points ?? 0), 0);
-      const correctResults = userPredictions.filter((prediction) => Number(prediction.points ?? 0) > 0).length;
+      const correctResults = userPredictions.filter((prediction) => {
+  const match = matchById.get(prediction.match_id);
+  if (!match || !isMatchFinishedForScoring(match)) return false;
+
+  const officialOutcome = predictionOutcome({
+    homeScore: Number(match.home_score ?? 0),
+    awayScore: Number(match.away_score ?? 0),
+  });
+
+  const predictedWinner =
+    prediction.predicted_winner ??
+    predictionOutcome({
+      homeScore: Number(prediction.predicted_home_score ?? 0),
+      awayScore: Number(prediction.predicted_away_score ?? 0),
+    });
+
+  return officialOutcome === predictedWinner;
+}).length;
       const exactScores = userPredictions.filter((prediction) => {
         const match = matchById.get(prediction.match_id);
         return Boolean(

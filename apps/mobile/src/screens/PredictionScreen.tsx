@@ -9,6 +9,7 @@ import {
   formatDateTimePtBr,
   formatMatchupDisplayName,
   getTeamDisplayName,
+  isPlayerEligibleForMatch,
   normalizeTeamNameWithAliases,
   predictionOutcome
 } from "../shared";
@@ -69,12 +70,15 @@ export const PredictionScreen = ({
   const [error, setError] = useState<string | null>(null);
   const predictionAccess = canSubmitPrediction(match, profile, new Date(), predictionLockMinutes);
   const canSubmit = predictionAccess.allowed;
-  const firstScorerPlayer = players.find((player) => player.id === firstScorerId) ?? null;
-  const manOfMatchPlayer = players.find((player) => player.id === manOfMatchId) ?? null;
+  const matchPlayers = players.filter((player) => isPlayerEligibleForMatch(player, match));
+  const firstScorerCandidate = players.find((player) => player.id === firstScorerId) ?? null;
+  const manOfMatchCandidate = players.find((player) => player.id === manOfMatchId) ?? null;
+  const firstScorerPlayer = firstScorerCandidate && isPlayerEligibleForMatch(firstScorerCandidate, match) ? firstScorerCandidate : null;
+  const manOfMatchPlayer = manOfMatchCandidate && isPlayerEligibleForMatch(manOfMatchCandidate, match) ? manOfMatchCandidate : null;
   const homeTeamName = getTeamDisplayName(match.home_team);
   const awayTeamName = getTeamDisplayName(match.away_team);
-  const firstScorerLabel = firstGoalNoGoals ? "Sem gols" : firstScorerPlayer?.name ?? "Não selecionado";
-  const manOfMatchLabel = manOfMatchPlayer?.name ?? "Não selecionado";
+  const firstScorerLabel = firstGoalNoGoals ? "Sem gols" : firstScorerPlayer?.name ?? (firstScorerCandidate && !isPlayerEligibleForMatch(firstScorerCandidate, match) ? "Jogador inválido para esta partida" : "Não selecionado");
+  const manOfMatchLabel = manOfMatchPlayer?.name ?? (manOfMatchCandidate && !isPlayerEligibleForMatch(manOfMatchCandidate, match) ? "Jogador inválido para esta partida" : "Não selecionado");
 
   const validateBeforeSubmit = () => {
     if (!profile) return "Sessão expirada. Entre novamente.";
@@ -83,6 +87,12 @@ export const PredictionScreen = ({
       return "Preencha o placar para enviar seu palpite.";
     }
     if (!winner) return "Selecione o vencedor para continuar.";
+    if (firstScorerId && !firstScorerPlayer) {
+      return "Selecione apenas jogadores das seleções desta partida.";
+    }
+    if (manOfMatchId && !manOfMatchPlayer) {
+      return "Selecione apenas jogadores das seleções desta partida.";
+    }
     return null;
   };
 
@@ -201,16 +211,16 @@ export const PredictionScreen = ({
                   setFirstGoalNoGoals(Boolean(noGoals));
                   setFirstScorerId(player?.id ?? null);
                 }}
-                players={players}
-                selectedPlayerId={firstScorerId}
+                players={matchPlayers}
+                selectedPlayerId={firstScorerPlayer?.id ?? null}
                 showNoGoals
               />
               <PlayerPicker
                 label="Homem do jogo"
                 match={match}
                 onChange={({ player }) => setManOfMatchId(player?.id ?? null)}
-                players={players}
-                selectedPlayerId={manOfMatchId}
+                players={matchPlayers}
+                selectedPlayerId={manOfMatchPlayer?.id ?? null}
               />
             </View>
 

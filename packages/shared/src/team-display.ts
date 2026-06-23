@@ -105,3 +105,23 @@ export const getTeamDisplayName = (teamName?: string | null, locale = "pt-BR") =
 
 export const formatMatchupDisplayName = (homeTeam?: string | null, awayTeam?: string | null, locale = "pt-BR") =>
   `${getTeamDisplayName(homeTeam, locale)} x ${getTeamDisplayName(awayTeam, locale)}`;
+
+export const isPlayerEligibleForMatch = (player: { team_code?: string; team_name: string }, match: { home_team: string; away_team: string }): boolean => {
+  const playerTeamNormalized = normalizeTeamNameWithAliases(player.team_name);
+  const homeTeamNormalized = normalizeTeamName(match.home_team);
+  const awayTeamNormalized = normalizeTeamName(match.away_team);
+
+  // Check by team_code first (more reliable)
+  if (player.team_code) {
+    const playerCodeNormalized = normalizeTeamName(player.team_code);
+    const homeCodeNormalized = normalizeTeamName(match.home_team);
+    const awayCodeNormalized = normalizeTeamName(match.away_team);
+
+    if (playerCodeNormalized === homeCodeNormalized || playerCodeNormalized === awayCodeNormalized) {
+      return true;
+    }
+  }
+
+  // Fallback to team_name comparison
+  return playerTeamNormalized === homeTeamNormalized || playerTeamNormalized === awayTeamNormalized;
+};

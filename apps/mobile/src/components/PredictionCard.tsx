@@ -4,6 +4,7 @@ import {
   getPredictionStatusLabel,
   getPredictionStatusTone,
   getTeamDisplayName,
+  isPlayerEligibleForMatch,
   type PredictionDisplayStatus
 } from "../shared";
 import { Pill } from "./ui";
@@ -49,6 +50,30 @@ const boolLabel = (value?: boolean | null) => {
 };
 
 const marketText = (value?: string | null) => value?.trim() || "-";
+
+const resolvePredictionPlayerLabel = ({
+  playerId,
+  fallbackName,
+  match,
+  playerById
+}: {
+  playerId?: string | null;
+  fallbackName?: string | null;
+  match: Match | null;
+  playerById: Map<string, Player>;
+}): string => {
+  const player = playerById.get(playerId ?? "");
+
+  if (player && match && isPlayerEligibleForMatch(player, match)) {
+    return player.name;
+  }
+
+  if (player && match && !isPlayerEligibleForMatch(player, match)) {
+    return "Jogador inválido para esta partida";
+  }
+
+  return fallbackName?.trim() || "-";
+};
 
 const PredictionDetail = ({ basis, label, value }: { basis: DimensionValue; label: string; value: string }) => (
   <View style={[styles.detailItem, { flexBasis: basis }]}>
@@ -167,8 +192,12 @@ export const PredictionCard = ({
           value={
             prediction.predicted_first_goal_no_goals
               ? "Sem gols"
-              : playerById.get(prediction.predicted_first_scorer_id ?? "")?.name
-                ?? marketText(prediction.predicted_first_scorer)
+              : resolvePredictionPlayerLabel({
+                  playerId: prediction.predicted_first_scorer_id,
+                  fallbackName: prediction.predicted_first_scorer,
+                  match,
+                  playerById
+                })
           }
         />
         <PredictionDetail basis={detailBasis} label="Ambos" value={boolLabel(prediction.predicted_both_teams_score)} />
@@ -176,8 +205,12 @@ export const PredictionCard = ({
           basis={detailBasis}
           label="MVP"
           value={
-            playerById.get(prediction.predicted_man_of_match_id ?? "")?.name
-              ?? marketText(prediction.predicted_man_of_match)
+            resolvePredictionPlayerLabel({
+              playerId: prediction.predicted_man_of_match_id,
+              fallbackName: prediction.predicted_man_of_match,
+              match,
+              playerById
+            })
           }
         />
         <PredictionDetail basis={detailBasis} label="Vermelho" value={boolLabel(prediction.predicted_red_card)} />

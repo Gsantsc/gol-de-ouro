@@ -50,12 +50,52 @@ const teamDisplayNamesPtBr: Record<string, string> = {
   "united states": "Estados Unidos",
 };
 
+const teamAliases: Record<string, string> = {
+  "brasil": "brazil",
+  "brazil": "brazil",
+  "estados unidos": "united states",
+  "united states": "united states",
+  "usa": "united states",
+  "usmnt": "united states",
+  "países baixos": "netherlands",
+  "netherlands": "netherlands",
+  "holanda": "netherlands",
+  "japão": "japan",
+  "japan": "japan",
+  "espanha": "spain",
+  "spain": "spain",
+  "arábia saudita": "saudi arabia",
+  "saudi arabia": "saudi arabia",
+  "bélgica": "belgium",
+  "belgium": "belgium",
+  "irã": "iran",
+  "iran": "iran",
+  "frança": "france",
+  "france": "france",
+  "iraque": "iraq",
+  "iraq": "iraq",
+  "portugal": "portugal",
+  "uzbequistão": "uzbekistan",
+  "uzbekistan": "uzbekistan",
+  "austrália": "australia",
+  "australia": "australia",
+  "tunísia": "tunisia",
+  "tunisia": "tunisia",
+  "suécia": "sweden",
+  "sweden": "sweden",
+};
+
 const normalizeTeamName = (value: string) =>
   value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+
+export const normalizeTeamNameWithAliases = (value: string): string => {
+  const normalized = normalizeTeamName(value);
+  return teamAliases[normalized] ?? normalized;
+};
 
 export const getTeamDisplayName = (teamName?: string | null, locale = "pt-BR") => {
   if (!teamName) return "";
@@ -65,3 +105,23 @@ export const getTeamDisplayName = (teamName?: string | null, locale = "pt-BR") =
 
 export const formatMatchupDisplayName = (homeTeam?: string | null, awayTeam?: string | null, locale = "pt-BR") =>
   `${getTeamDisplayName(homeTeam, locale)} x ${getTeamDisplayName(awayTeam, locale)}`;
+
+export const isPlayerEligibleForMatch = (player: { team_code?: string; team_name: string }, match: { home_team: string; away_team: string }): boolean => {
+  const playerTeamNormalized = normalizeTeamNameWithAliases(player.team_name);
+  const homeTeamNormalized = normalizeTeamName(match.home_team);
+  const awayTeamNormalized = normalizeTeamName(match.away_team);
+
+  // Check by team_code first (more reliable)
+  if (player.team_code) {
+    const playerCodeNormalized = normalizeTeamName(player.team_code);
+    const homeCodeNormalized = normalizeTeamName(match.home_team);
+    const awayCodeNormalized = normalizeTeamName(match.away_team);
+
+    if (playerCodeNormalized === homeCodeNormalized || playerCodeNormalized === awayCodeNormalized) {
+      return true;
+    }
+  }
+
+  // Fallback to team_name comparison
+  return playerTeamNormalized === homeTeamNormalized || playerTeamNormalized === awayTeamNormalized;
+};

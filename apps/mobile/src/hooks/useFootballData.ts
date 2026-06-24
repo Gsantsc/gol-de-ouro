@@ -25,6 +25,7 @@ import {
   listNotifications,
   listPlayers,
   listRanking,
+  listCompetitionRanking,
   getAppSettings,
   listTournaments
 } from "../services/football.service";
@@ -35,6 +36,7 @@ type FootballDataSnapshot = {
   appInvites: AppInvite[];
   competitionGroups: CompetitionGroup[];
   competitions: Competition[];
+  competitionRanking: Ranking[];
   groupMembers: GroupMember[];
   groups: Group[];
   matches: Match[];
@@ -51,6 +53,7 @@ const emptySnapshot: FootballDataSnapshot = {
   appInvites: [],
   competitionGroups: [],
   competitions: [],
+  competitionRanking: [],
   groupMembers: [],
   groups: [],
   matches: [],
@@ -123,11 +126,12 @@ export const useFootballData = (userId?: string) => {
     try {
       setError(null);
       const [
-        nextTournaments,
-        nextMatches,
-        nextPredictions,
-        nextRanking,
-        nextGroups,
+  nextTournaments,
+  nextMatches,
+  nextPredictions,
+  nextRanking,
+  nextCompetitionRanking,
+  nextGroups,
         nextGroupMembers,
         nextNotifications,
         nextPlayers,
@@ -137,10 +141,11 @@ export const useFootballData = (userId?: string) => {
         nextSettings
       ] = await withRetry(() => Promise.all([
         listTournaments(),
-        listMatches(),
-        listMyPredictions(userId),
-        listRanking(),
-        listMyGroups(userId),
+listMatches(),
+listMyPredictions(userId),
+listRanking(),
+loadOptional("competition_rankings", () => listCompetitionRanking("world_cup_2026"), []),
+listMyGroups(userId),
         listGroupMembers(),
         listNotifications(userId),
         listPlayers(),
@@ -151,11 +156,12 @@ export const useFootballData = (userId?: string) => {
       ]));
 
       applySnapshot({
-        achievements: nextAchievements,
-        appInvites: nextAppInvites,
-        competitionGroups: nextCompetitionsData.competitionGroups,
-        competitions: nextCompetitionsData.competitions,
-        groupMembers: nextGroupMembers,
+  achievements: nextAchievements,
+  appInvites: nextAppInvites,
+  competitionGroups: nextCompetitionsData.competitionGroups,
+  competitions: nextCompetitionsData.competitions,
+  competitionRanking: nextCompetitionRanking,
+  groupMembers: nextGroupMembers,
         groups: nextGroups,
         matches: nextMatches,
         notifications: nextNotifications,
@@ -164,7 +170,8 @@ export const useFootballData = (userId?: string) => {
         ranking: nextRanking,
         settings: nextSettings,
         tournaments: nextTournaments
-      }, userId);
+      }, 
+      userId);
     } catch (nextError) {
       console.error(nextError);
       setError(nextError instanceof Error ? nextError.message : "Não foi possível carregar os dados.");
@@ -228,8 +235,9 @@ export const useFootballData = (userId?: string) => {
     achievements: snapshot.achievements,
     appInvites: snapshot.appInvites,
     competitionGroups: snapshot.competitionGroups,
-    competitions: snapshot.competitions,
-    groupMembers: snapshot.groupMembers,
+competitions: snapshot.competitions,
+competitionRanking: snapshot.competitionRanking,
+groupMembers: snapshot.groupMembers,
     groups: snapshot.groups,
     matches: snapshot.matches,
     myRanking,

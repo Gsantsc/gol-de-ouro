@@ -64,6 +64,7 @@ export type RecalculatePredictionsOptions = {
 
 export type RecalculatePredictionsSummary = {
   championship: string;
+  competitionRankingsUpdated: number;
   dryRun: boolean;
   finishedMatches: number;
   message: string;
@@ -118,11 +119,25 @@ const skipReasonForMatch = (match: MatchRow, matchPredictions: PredictionRow[]) 
   return "not_finished";
 };
 
+type ProviderRunPayload = {
+  inserted_count: number;
+  message: string;
+  provider_name: string;
+  status: "success" | "failed";
+  updated_count: number;
+};
+
+type AdminLogPayload = {
+  action: string;
+  admin_id: string;
+  entity: string;
+};
+
 const writeProviderRun = async (
   supabase: SupabaseClient,
   summary: RecalculatePredictionsSummary,
 ) => {
-  const minimalPayload = {
+  const minimalPayload: ProviderRunPayload = {
     inserted_count: 0,
     message: summary.message,
     provider_name: "recalculate-predictions",
@@ -162,8 +177,9 @@ export const runRecalculatePredictions = async ({
 }: RecalculatePredictionsOptions): Promise<RecalculatePredictionsSummary> => {
   const skippedReasons: Record<string, number> = {};
   let predictionsFound = 0;
-  let predictionsUpdated = 0;
-  let rankingsUpdated = 0;
+let predictionsUpdated = 0;
+let rankingsUpdated = 0;
+let competitionRankingsUpdated = 0;
 
   try {
     const { data: matchesData, error: matchesError } = await supabase
@@ -183,9 +199,12 @@ export const runRecalculatePredictions = async ({
 
     const allPredictions = (allPredictionsData ?? []) as PredictionRow[];
     const predictionsByMatch = new Map<string, PredictionRow[]>();
+    const predictionsByUser = new Map<string, PredictionRow[]>();
     for (const prediction of allPredictions) {
       if (!predictionsByMatch.has(prediction.match_id)) predictionsByMatch.set(prediction.match_id, []);
       predictionsByMatch.get(prediction.match_id)?.push(prediction);
+      if (!predictionsByUser.has(prediction.user_id)) predictionsByUser.set(prediction.user_id, []);
+      predictionsByUser.get(prediction.user_id)?.push(prediction);
     }
 
     const scorableMatches = allMatches.filter((match) =>
@@ -226,92 +245,179 @@ export const runRecalculatePredictions = async ({
       }
     }
 
-    const matchById = new Map(allMatches.map((match) => [match.id, match]));
-    const [{ data: usersData, error: usersError }, { data: rankingsData, error: rankingsError }] = await Promise.all([
-      supabase.from("users").select("id,status,approval_status,blocked,deleted_at").is("deleted_at", null),
-      supabase.from("rankings").select("user_id,total_points,correct_results,exact_scores"),
-    ]);
+const [
+  { data: usersData, error: usersError },
+  { data: rankingsData, error: rankingsError },
+  { data: competitionRankingsData, error: competitionRankingsError },
+] = await Promise.all([
+  supabase.from("users").select("id,status,approval_status,blocked,deleted_at").is("deleted_at", null),
+  supabase.from("rankings").select("user_id,total_points,correct_results,exact_scores"),
+  supabase
+    .from("competition_rankings")
+    .select("championship,user_id,total_points,correct_results,exact_scores")
+    .eq("championship", championship),
+]);
 
-    if (usersError) throw usersError;
-    if (rankingsError) throw rankingsError;
+if (usersError) throw usersError;
+if (rankingsError) throw rankingsError;
+if (competitionRankingsError) throw competitionRankingsError;
 
-    const users = (usersData ?? []) as UserRow[];
-    const rankings = rankingsData ?? [];
-    const rankingByUser = new Map(rankings.map((ranking) => [ranking.user_id, ranking]));
-    const predictionsByUser = new Map<string, PredictionRow[]>();
+const users = (usersData ?? []) as UserRow[];
+const rankings = rankingsData ?? [];
+const competitionRankings = competitionRankingsData ?? [];
+const rankingByUser = new Map(rankings.map((ranking) => [ranking.user_id, ranking]));
+const competitionRankingByUser = new Map(competitionRankings.map((ranking) => [ranking.user_id, ranking]));
+const matchById = new Map(allMatches.map((match) => [match.id, match]));
 
-    for (const prediction of allPredictions) {
-      if (!predictionsByUser.has(prediction.user_id)) predictionsByUser.set(prediction.user_id, []);
-      predictionsByUser.get(prediction.user_id)?.push(prediction);
-    }
+const changed: Array<{
+  correct_results: number;
+  exact_scores: number;
+  total_points: number;
+  updated_at: string;
+  user_id: string;
+}> = [];
+const competitionChanged: Array<{
+  championship: string;
+  correct_results: number;
+  exact_scores: number;
+  total_points: number;
+  updated_at: string;
+  user_id: string;
+}> = [];
 
-    const changed = [];
-    for (const user of users) {
-      const status = user.status ?? (user.blocked ? "suspended" : user.approval_status);
-      if (status !== "approved" || user.blocked) continue;
+for (const user of users) {
+  const status = user.status ?? (user.blocked ? "suspended" : user.approval_status);
+  if (status !== "approved" || user.blocked) continue;
 
-      const userPredictions = predictionsByUser.get(user.id) ?? [];
-      const totalPoints = userPredictions.reduce((sum, prediction) => sum + Number(prediction.points ?? 0), 0);
-      const correctResults = userPredictions.filter((prediction) => {
-  const match = matchById.get(prediction.match_id);
-  if (!match || !isMatchFinishedForScoring(match)) return false;
+  const userPredictions = predictionsByUser.get(user.id) ?? [];
+  const competitionUserPredictions = userPredictions.filter((prediction) => matchById.has(prediction.match_id));
 
-  const officialOutcome = predictionOutcome({
-    homeScore: Number(match.home_score ?? 0),
-    awayScore: Number(match.away_score ?? 0),
-  });
+  const totalPoints = userPredictions.reduce((sum, prediction) => sum + Number(prediction.points ?? 0), 0);
+  const competitionTotalPoints = competitionUserPredictions.reduce((sum, prediction) => sum + Number(prediction.points ?? 0), 0);
 
-  const predictedWinner =
-    prediction.predicted_winner ??
-    predictionOutcome({
-      homeScore: Number(prediction.predicted_home_score ?? 0),
-      awayScore: Number(prediction.predicted_away_score ?? 0),
+  const correctResults = userPredictions.filter((prediction) => {
+    const match = matchById.get(prediction.match_id);
+    if (!match || !isMatchFinishedForScoring(match)) return false;
+
+    const officialOutcome = predictionOutcome({
+      homeScore: Number(match.home_score ?? 0),
+      awayScore: Number(match.away_score ?? 0),
     });
 
-  return officialOutcome === predictedWinner;
-}).length;
-      const exactScores = userPredictions.filter((prediction) => {
-        const match = matchById.get(prediction.match_id);
-        return Boolean(
-          match
-          && match.status === "encerrado"
-          && Number(prediction.predicted_home_score) === Number(match.home_score)
-          && Number(prediction.predicted_away_score) === Number(match.away_score),
-        );
-      }).length;
-      const current = rankingByUser.get(user.id);
-
-      if (
-        current
-        && Number(current.total_points ?? 0) === totalPoints
-        && Number(current.correct_results ?? 0) === correctResults
-        && Number(current.exact_scores ?? 0) === exactScores
-      ) {
-        continue;
-      }
-
-      changed.push({
-        correct_results: correctResults,
-        exact_scores: exactScores,
-        total_points: totalPoints,
-        updated_at: new Date().toISOString(),
-        user_id: user.id,
+    const predictedWinner =
+      prediction.predicted_winner ??
+      predictionOutcome({
+        homeScore: Number(prediction.predicted_home_score ?? 0),
+        awayScore: Number(prediction.predicted_away_score ?? 0),
       });
-    }
 
-    rankingsUpdated = changed.length;
+    return officialOutcome === predictedWinner;
+  }).length;
 
-    if (changed.length && !dryRun) {
-      const rankingPayload = dedupeByKey(changed, (row) => row.user_id);
-      const { error } = await supabase
-        .from("rankings")
-        .upsert(rankingPayload, { onConflict: "user_id" });
-      if (error) throw error;
-    }
+  const exactScores = userPredictions.filter((prediction) => {
+    const match = matchById.get(prediction.match_id);
+    return Boolean(
+      match &&
+      match.status === "encerrado" &&
+      Number(prediction.predicted_home_score) === Number(match.home_score) &&
+      Number(prediction.predicted_away_score) === Number(match.away_score),
+    );
+  }).length;
 
-    const message = `Pontuacao recalculada: ${scorableMatches.length} jogos encerrados; ${predictionsUpdated} palpites recalculados; ${rankingsUpdated} rankings atualizados.`;
+  const competitionCorrectResults = competitionUserPredictions.filter((prediction) => {
+    const match = matchById.get(prediction.match_id);
+    if (!match || !isMatchFinishedForScoring(match)) return false;
+
+    const officialOutcome = predictionOutcome({
+      homeScore: Number(match.home_score ?? 0),
+      awayScore: Number(match.away_score ?? 0),
+    });
+
+    const predictedWinner =
+      prediction.predicted_winner ??
+      predictionOutcome({
+        homeScore: Number(prediction.predicted_home_score ?? 0),
+        awayScore: Number(prediction.predicted_away_score ?? 0),
+      });
+
+    return officialOutcome === predictedWinner;
+  }).length;
+
+  const competitionExactScores = competitionUserPredictions.filter((prediction) => {
+    const match = matchById.get(prediction.match_id);
+    return Boolean(
+      match &&
+      match.status === "encerrado" &&
+      Number(prediction.predicted_home_score) === Number(match.home_score) &&
+      Number(prediction.predicted_away_score) === Number(match.away_score),
+    );
+  }).length;
+
+  const current = rankingByUser.get(user.id);
+  const competitionCurrent = competitionRankingByUser.get(user.id);
+
+  if (
+    !competitionCurrent ||
+    Number(competitionCurrent.total_points ?? 0) !== competitionTotalPoints ||
+    Number(competitionCurrent.correct_results ?? 0) !== competitionCorrectResults ||
+    Number(competitionCurrent.exact_scores ?? 0) !== competitionExactScores
+  ) {
+    competitionChanged.push({
+      championship,
+      correct_results: competitionCorrectResults,
+      exact_scores: competitionExactScores,
+      total_points: competitionTotalPoints,
+      updated_at: new Date().toISOString(),
+      user_id: user.id,
+    });
+  }
+
+  if (
+    current &&
+    Number(current.total_points ?? 0) === totalPoints &&
+    Number(current.correct_results ?? 0) === correctResults &&
+    Number(current.exact_scores ?? 0) === exactScores
+  ) {
+    continue;
+  }
+
+  changed.push({
+    correct_results: correctResults,
+    exact_scores: exactScores,
+    total_points: totalPoints,
+    updated_at: new Date().toISOString(),
+    user_id: user.id,
+  });
+}
+
+rankingsUpdated = changed.length;
+competitionRankingsUpdated = competitionChanged.length;
+
+if (changed.length && !dryRun) {
+  const rankingPayload = dedupeByKey(changed, (row) => row.user_id);
+  const { error } = await supabase
+    .from("rankings")
+    .upsert(rankingPayload, { onConflict: "user_id" });
+  if (error) throw error;
+}
+
+if (competitionChanged.length && !dryRun) {
+  const competitionRankingPayload = dedupeByKey(
+    competitionChanged,
+    (row) => `${row.championship}:${row.user_id}`,
+  );
+
+  const { error } = await supabase
+    .from("competition_rankings")
+    .upsert(competitionRankingPayload, { onConflict: "championship,user_id" });
+
+  if (error) throw error;
+}
+
+    const message = `Pontuacao recalculada: ${scorableMatches.length} jogos encerrados; ${predictionsUpdated} palpites recalculados; ${rankingsUpdated} rankings globais atualizados; ${competitionRankingsUpdated} rankings de competicao atualizados.`;
     const summary: RecalculatePredictionsSummary = {
       championship,
+      competitionRankingsUpdated,
       dryRun,
       finishedMatches: scorableMatches.length,
       message,
@@ -339,9 +445,10 @@ export const runRecalculatePredictions = async ({
     console.error("[recalculate-predictions]", message);
 
     return {
-      championship,
-      dryRun,
-      finishedMatches: 0,
+  championship,
+  competitionRankingsUpdated,
+  dryRun,
+  finishedMatches: 0,
       message,
       predictionsFound,
       predictionsUpdated,

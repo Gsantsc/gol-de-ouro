@@ -272,6 +272,30 @@ export const listRanking = async () => {
     };
   }));
 };
+export const listCompetitionRanking = async (championship: string) => {
+  const [{ data, error }, profiles] = await Promise.all([
+    supabase
+      .from("competition_rankings")
+      .select("*")
+      .eq("championship", championship)
+      .order("total_points", { ascending: false })
+      .order("exact_scores", { ascending: false }),
+    loadPublicProfiles(),
+  ]);
+
+  if (error) throw error;
+
+  return sortRankings(((data ?? []) as Ranking[]).map((ranking) => {
+    const profile = profiles.get(ranking.user_id);
+
+    return {
+      ...ranking,
+      championship,
+      competition_label: championship === "world_cup_2026" ? "Copa do Mundo 2026" : championship,
+      user: profile ? { email: "", name: profile.name } : undefined
+    };
+  }));
+};
 
 export const getMatchStatistics = async (matchId: string) => {
   const { data, error } = await supabase

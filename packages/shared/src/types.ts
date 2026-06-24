@@ -137,6 +137,8 @@ export type Ranking = {
   correct_results: number;
   exact_scores: number;
   updated_at: string;
+  championship?: string | null;
+  competition_label?: string | null;
   user?: Pick<Profile, "name" | "email">;
 };
 

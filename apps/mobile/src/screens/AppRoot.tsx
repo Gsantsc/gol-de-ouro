@@ -93,11 +93,12 @@ const AppContent = () => {
     myRanking,
     notifications,
     players,
-    predictions,
-    ranking,
-    refresh,
-    settings,
-    tournaments
+predictions,
+ranking,
+competitionRanking,
+refresh,
+settings,
+tournaments
   } = useFootballData(approvedUserId);
   const predictionLockMinutes = settings.prediction_lock_minutes;
 
@@ -362,14 +363,20 @@ const AppContent = () => {
         />
       ) : activeTab === "predictions" ? (
         <PredictionsScreen
-          matches={matches}
-          players={players}
-          predictionLockMinutes={predictionLockMinutes}
-          predictions={predictions}
-          ranking={myRanking}
-        />
+  matches={matches}
+  onViewGames={() => setActiveTab("games")}
+  players={players}
+  predictionLockMinutes={predictionLockMinutes}
+  predictions={predictions}
+  ranking={myRanking}
+/>
       ) : activeTab === "ranking" ? (
-        <RankingScreen groups={groups} members={groupMembers} ranking={ranking} userId={profile.id} />
+        <RankingScreen
+          groups={groups}
+          members={groupMembers}
+          ranking={ranking}
+          userId={profile.id}
+        />
       ) : activeTab === "groups" ? (
         <ScreenScroll>
           <GroupsScreen

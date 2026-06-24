@@ -17,18 +17,22 @@ const initialsFor = (name?: string) =>
 
 const xpFor = (item: Ranking) => item.total_points * 10 + item.correct_results * 4 + item.exact_scores * 12;
 
+type RankingTab = "global" | "worldCup" | "friends" | "leagues";
+
 export const RankingScreen = ({
+  competitionRanking = [],
   groups = [],
   members = [],
   ranking,
   userId
 }: {
+  competitionRanking?: Ranking[];
   groups?: Group[];
   members?: GroupMember[];
   ranking: Ranking[];
   userId?: string;
 }) => {
-  const [tab, setTab] = useState<"global" | "friends" | "leagues">("global");
+  const [tab, setTab] = useState<RankingTab>("global");
   const myGroupIds = new Set(
     members.filter((member) => member.user_id === userId).map((member) => member.group_id),
   );
@@ -81,17 +85,18 @@ export const RankingScreen = ({
       )}
 
       <View style={styles.tabs}>
-        {[
-          { id: "global", label: "Global" },
-          { id: "friends", label: "Amigos" },
-          { id: "leagues", label: "Minhas Ligas" }
-        ].map((item) => {
+       {[
+  { id: "global", label: "Global" },
+  { id: "worldCup", label: "Copa 2026" },
+  { id: "friends", label: "Amigos" },
+  { id: "leagues", label: "Minhas Ligas" }
+].map((item) => {
           const active = tab === item.id;
 
           return (
             <Pressable
               key={item.id}
-              onPress={() => setTab(item.id as "global" | "friends" | "leagues")}
+              onPress={() => setTab(item.id as RankingTab)}
               style={[styles.tab, active && styles.tabActive]}
             >
               <Text style={[styles.tabText, active && styles.tabTextActive]}>{item.label}</Text>
@@ -100,8 +105,17 @@ export const RankingScreen = ({
         })}
       </View>
 
-      {tab === "global" && <RankingList ranking={ranking} title="Global" userId={userId} />}
-      {tab === "friends" && <RankingList ranking={friendsRanking} title="Amigos" userId={userId} />}
+      {tab === "global" && <RankingList ranking={ranking} title="Ranking Global" userId={userId} />}
+
+{tab === "worldCup" && (
+  <RankingList
+    ranking={competitionRanking}
+    title="Ranking Copa do Mundo 2026"
+    userId={userId}
+  />
+)}
+
+{tab === "friends" && <RankingList ranking={friendsRanking} title="Amigos" userId={userId} />}
 
       {tab === "leagues" && (
         <>

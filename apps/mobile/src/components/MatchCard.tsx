@@ -1,4 +1,4 @@
-import { memo } from "react";
+import React, { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Clock, Lock, MapPin, RadioTower, Trophy } from "lucide-react-native";
 import type { Match, Prediction } from "../shared";
@@ -46,6 +46,28 @@ const normalizeName = (value: string) =>
 
 const cityForStadium = (stadium?: string | null) =>
   stadium ? stadiumCities[normalizeName(stadium)] ?? null : null;
+
+const TeamLine = ({
+  name,
+  logoUrl,
+  score
+}: {
+  name: string;
+  logoUrl?: string | null;
+  score: number;
+}) => {
+  const displayName = getTeamDisplayName(name);
+
+  return (
+    <View style={styles.teamLine}>
+      <TeamFlag logoUrl={logoUrl} name={name} size={26} />
+      <Text numberOfLines={1} style={styles.teamName}>{displayName}</Text>
+      <View style={styles.scoreBadge}>
+        <Text style={styles.scoreText}>{score}</Text>
+      </View>
+    </View>
+  );
+};
 
 const MatchCardBase = ({
   match,
@@ -101,46 +123,56 @@ const MatchCardBase = ({
         </View>
         <View style={[styles.actionRail, canEditOrPredict && styles.actionRailOpen, prediction && styles.actionRailLocked]}>
           <Text style={styles.railLabel}>{actionLabel}</Text>
-          {predictionActionMode === "hidden" ? null : predictionActionMode === "redirect" ? (
-            <>
-              {prediction ? (
-                <>
-                  <Text style={styles.predictionScore}>Enviado</Text>
-                  <Text style={styles.railHint}>detalhes em Palpites</Text>
-                </>
-              ) : canEditOrPredict ? (
-                <Text style={styles.railHint}>disponível</Text>
-              ) : (
-                <Text style={styles.closedLabel}>offline</Text>
-              )}
-              {onOpenPredictions && (
-                <Pressable accessibilityRole="button" onPress={onOpenPredictions} style={styles.predictCta}>
-                  <Text style={styles.predictCtaText}>Ir para Palpites</Text>
-                </Pressable>
-              )}
-            </>
-          ) : (
-            <>
-              {prediction ? (
-                <>
-                  <Text style={styles.predictionScore}>Enviado</Text>
-                  <Text style={styles.railHint}>detalhes em Palpites</Text>
-                  {canEditOrPredict ? (
-                    <Pressable accessibilityRole="button" onPress={onPredict} style={styles.predictCta}>
-                      <Text style={styles.predictCtaText}>Editar</Text>
-                    </Pressable>
-                  ) : (
-                    <Text style={styles.railHint}>fechado</Text>
-                  )}
-                </>
-              ) : canEditOrPredict ? (
-                <Pressable accessibilityRole="button" onPress={onPredict} style={styles.predictCta}>
-                  <Text style={styles.predictCtaText}>Palpitar</Text>
-                </Pressable>
-              ) : (
-                <Text style={styles.closedLabel}>offline</Text>
-              )}
-            </>
+          {predictionActionMode !== "hidden" && (
+            predictionActionMode === "redirect" ? (
+              <>
+                {prediction ? (
+                  <>
+                    <Text style={styles.predictionScore}>Enviado</Text>
+                    <Text style={styles.railHint}>detalhes em Palpites</Text>
+                  </>
+                ) : canEditOrPredict ? (
+                  <Text style={styles.railHint}>disponível</Text>
+                ) : (
+                  <>
+                    <Text style={styles.closedLabel}>offline</Text>
+                    {(onOpenPredictions || canEditOrPredict) && (
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={canEditOrPredict ? onPredict : onOpenPredictions}
+                        style={styles.predictCta}
+                      >
+                        <Text style={styles.predictCtaText}>
+                          {canEditOrPredict ? (prediction ? "Editar palpite" : "Ir para Palpites") : "Ver Palpites"}
+                        </Text>
+                      </Pressable>
+                    )}
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                {prediction ? (
+                  <>
+                    <Text style={styles.predictionScore}>Enviado</Text>
+                    <Text style={styles.railHint}>detalhes em Palpites</Text>
+                    {canEditOrPredict ? (
+                      <Pressable accessibilityRole="button" onPress={onPredict} style={styles.predictCta}>
+                        <Text style={styles.predictCtaText}>Editar</Text>
+                      </Pressable>
+                    ) : (
+                      <Text style={styles.railHint}>fechado</Text>
+                    )}
+                  </>
+                ) : canEditOrPredict ? (
+                  <Pressable accessibilityRole="button" onPress={onPredict} style={styles.predictCta}>
+                    <Text style={styles.predictCtaText}>Palpitar</Text>
+                  </Pressable>
+                ) : (
+                  <Text style={styles.closedLabel}>offline</Text>
+                )}
+              </>
+            )
           )}
         </View>
       </View>
@@ -170,28 +202,6 @@ const MatchCardBase = ({
         </View>
       </View>
     </Pressable>
-  );
-};
-
-const TeamLine = ({
-  name,
-  logoUrl,
-  score
-}: {
-  name: string;
-  logoUrl?: string | null;
-  score: number;
-}) => {
-  const displayName = getTeamDisplayName(name);
-
-  return (
-    <View style={styles.teamLine}>
-      <TeamFlag logoUrl={logoUrl} name={name} size={26} />
-      <Text numberOfLines={1} style={styles.teamName}>{displayName}</Text>
-      <View style={styles.scoreBadge}>
-        <Text style={styles.scoreText}>{score}</Text>
-      </View>
-    </View>
   );
 };
 

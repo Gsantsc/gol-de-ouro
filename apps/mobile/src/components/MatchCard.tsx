@@ -47,24 +47,31 @@ const normalizeName = (value: string) =>
 const cityForStadium = (stadium?: string | null) =>
   stadium ? stadiumCities[normalizeName(stadium)] ?? null : null;
 
-const TeamLine = ({
+const TeamColumn = ({
+  align = "left",
   name,
   logoUrl,
   score
 }: {
+  align?: "left" | "right";
   name: string;
   logoUrl?: string | null;
-  score: number;
+  score: string;
 }) => {
   const displayName = getTeamDisplayName(name);
 
   return (
-    <View style={styles.teamLine}>
-      <TeamFlag logoUrl={logoUrl} name={name} size={26} />
-      <Text numberOfLines={1} style={styles.teamName}>{displayName}</Text>
-      <View style={styles.scoreBadge}>
-        <Text style={styles.scoreText}>{score}</Text>
-      </View>
+    <View style={[styles.teamColumn, align === "right" && styles.teamColumnRight]}>
+      <TeamFlag logoUrl={logoUrl} name={name} size={30} />
+
+      <Text
+        numberOfLines={2}
+        style={[styles.teamColumnName, align === "right" && styles.teamColumnNameRight]}
+      >
+        {displayName}
+      </Text>
+
+      <Text style={styles.teamColumnScore}>{score}</Text>
     </View>
   );
 };
@@ -93,6 +100,9 @@ const MatchCardBase = ({
   const statusLabel = MATCH_STATUS_LABELS[calculatedStatus];
   const venue = [city ?? match.stadium, match.round].filter(Boolean).join(" - ");
   const actionLabel = prediction ? "Editar" : canEditOrPredict ? "Aberto" : "Fechado";
+  const shouldShowScore = calculatedStatus === "ao_vivo" || calculatedStatus === "encerrado";
+  const homeScoreLabel = shouldShowScore ? String(match.live_score?.home ?? match.home_score ?? 0) : "-";
+  const awayScoreLabel = shouldShowScore ? String(match.live_score?.away ?? match.away_score ?? 0) : "-";
 
   return (
     <Pressable
@@ -109,18 +119,23 @@ const MatchCardBase = ({
       </View>
 
       <View style={styles.mainRow}>
-        <View style={styles.teams}>
-          <TeamLine
+        <View style={styles.scoreboard}>
+          <TeamColumn
             logoUrl={match.home_team_logo_url}
             name={match.home_team}
-            score={match.home_score}
+            score={homeScoreLabel}
           />
-          <TeamLine
+
+          <Text style={styles.versusText}>x</Text>
+
+          <TeamColumn
+            align="right"
             logoUrl={match.away_team_logo_url}
             name={match.away_team}
-            score={match.away_score}
+            score={awayScoreLabel}
           />
         </View>
+
         <View style={[styles.actionRail, canEditOrPredict && styles.actionRailOpen, prediction && styles.actionRailLocked]}>
           <Text style={styles.railLabel}>{actionLabel}</Text>
           {predictionActionMode !== "hidden" && (
@@ -243,8 +258,49 @@ const styles = StyleSheet.create({
   },
   mainRow: {
     alignItems: "stretch",
-    flexDirection: "row",
+    flexDirection: "column",
     gap: spacing.sm
+  },
+  scoreboard: {
+    alignItems: "stretch",
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.sm,
+    justifyContent: "space-between",
+    padding: spacing.sm
+  },
+  teamColumn: {
+    alignItems: "flex-start",
+    flex: 1,
+    gap: 4,
+    minWidth: 0
+  },
+  teamColumnRight: {
+    alignItems: "flex-end"
+  },
+  teamColumnName: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "900",
+    lineHeight: 17
+  },
+  teamColumnNameRight: {
+    textAlign: "right"
+  },
+  teamColumnScore: {
+    color: colors.gold,
+    fontSize: 24,
+    fontWeight: "900",
+    lineHeight: 28
+  },
+  versusText: {
+    alignSelf: "center",
+    color: colors.muted,
+    fontSize: 18,
+    fontWeight: "900"
   },
   teams: {
     flex: 1,
@@ -304,10 +360,14 @@ const styles = StyleSheet.create({
     borderColor: colors.borderGold,
     borderRadius: radius.sm,
     borderWidth: 1,
-    justifyContent: "center",
-    minWidth: 76,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xs
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+    justifyContent: "space-between",
+    minWidth: 0,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    width: "100%"
   },
   actionRailOpen: {
     backgroundColor: colors.goldSoft,

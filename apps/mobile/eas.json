@@ -14,6 +14,20 @@
         "EXPO_PUBLIC_APP_ENV": "development"
       }
     },
+    "beta-ios": {
+      "distribution": "store",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_EAS_PROJECT_ID": "a8c8cf09-d06c-4823-a2a6-c0b4c2d75196",
+        "EXPO_IOS_BUNDLE_IDENTIFIER": "br.com.goldeouro.app",
+        "EXPO_PUBLIC_APP_ENV": "beta",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_xVYiaDfdL6rRkojrnaVgtw_FUWEytkj",
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_xVYiaDfdL6rRkojrnaVgtw_FUWEytkj",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ducbujfguxyjqrjjvjxu.supabase.co"
+      }
+    },
     "beta-apk": {
       "distribution": "internal",
       "android": {

@@ -1,6 +1,8 @@
+declare function require(moduleName: string): any;
 const fs = require("fs");
 const path = require("path");
 
+declare const __dirname: string;
 const rootEnvPath = path.resolve(__dirname, "../..", ".env");
 const mobileEnvPath = path.resolve(__dirname, ".env");
 
@@ -24,7 +26,7 @@ loadEnvFile(mobileEnvPath, true);
 
 const androidVersionCode = Number(process.env.EXPO_ANDROID_VERSION_CODE ?? "1");
 
-module.exports = {
+export default {
   expo: {
     name: "Gol de Ouro",
     slug: "gol-de-ouro",
@@ -37,6 +39,10 @@ module.exports = {
     android: {
       package: process.env.EXPO_ANDROID_PACKAGE || "br.com.goldeouro.app",
       versionCode: Number.isFinite(androidVersionCode) ? androidVersionCode : 1
+    },
+    ios: {
+      bundleIdentifier: process.env.EXPO_IOS_BUNDLE_IDENTIFIER || "br.com.goldeouro.app",
+      supportsTablet: false
     },
     web: {
       bundler: "metro",

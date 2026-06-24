@@ -103,6 +103,16 @@ const MatchCardBase = ({
   const shouldShowScore = calculatedStatus === "ao_vivo" || calculatedStatus === "encerrado";
   const homeScoreLabel = shouldShowScore ? String(match.live_score?.home ?? match.home_score ?? 0) : "-";
   const awayScoreLabel = shouldShowScore ? String(match.live_score?.away ?? match.away_score ?? 0) : "-";
+  const showRedirectCta = canEditOrPredict || Boolean(onOpenPredictions);
+
+  const handleRedirectPredictionPress = () => {
+    if (canEditOrPredict) {
+      onPredict();
+      return;
+    }
+
+    onOpenPredictions?.();
+  };
 
   return (
     <Pressable
@@ -138,56 +148,50 @@ const MatchCardBase = ({
 
         <View style={[styles.actionRail, canEditOrPredict && styles.actionRailOpen, prediction && styles.actionRailLocked]}>
           <Text style={styles.railLabel}>{actionLabel}</Text>
-          {predictionActionMode !== "hidden" && (
-            predictionActionMode === "redirect" ? (
-              <>
-                {prediction ? (
-                  <>
-                    <Text style={styles.predictionScore}>Enviado</Text>
-                    <Text style={styles.railHint}>detalhes em Palpites</Text>
-                  </>
-                ) : canEditOrPredict ? (
-                  <Text style={styles.railHint}>dispon√≠vel</Text>
-                ) : (
-                  <>
-                    <Text style={styles.closedLabel}>offline</Text>
-                    {(onOpenPredictions || canEditOrPredict) && (
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={canEditOrPredict ? onPredict : onOpenPredictions}
-                        style={styles.predictCta}
-                      >
-                        <Text style={styles.predictCtaText}>
-                          {canEditOrPredict ? (prediction ? "Editar palpite" : "Ir para Palpites") : "Ver Palpites"}
-                        </Text>
-                      </Pressable>
-                    )}
-                  </>
-                )}
-              </>
-            ) : (
-              <>
-                {prediction ? (
-                  <>
-                    <Text style={styles.predictionScore}>Enviado</Text>
-                    <Text style={styles.railHint}>detalhes em Palpites</Text>
-                    {canEditOrPredict ? (
-                      <Pressable accessibilityRole="button" onPress={onPredict} style={styles.predictCta}>
-                        <Text style={styles.predictCtaText}>Editar</Text>
-                      </Pressable>
-                    ) : (
-                      <Text style={styles.railHint}>fechado</Text>
-                    )}
-                  </>
-                ) : canEditOrPredict ? (
-                  <Pressable accessibilityRole="button" onPress={onPredict} style={styles.predictCta}>
-                    <Text style={styles.predictCtaText}>Palpitar</Text>
-                  </Pressable>
-                ) : (
-                  <Text style={styles.closedLabel}>offline</Text>
-                )}
-              </>
-            )
+
+          {predictionActionMode === "hidden" ? null : predictionActionMode === "redirect" ? (
+            <>
+              {prediction ? (
+                <>
+                  <Text style={styles.predictionScore}>Enviado</Text>
+                  <Text style={styles.railHint}>detalhes em Palpites</Text>
+                </>
+              ) : canEditOrPredict ? (
+                <Text style={styles.railHint}>disponÌvel</Text>
+              ) : (
+                <Text style={styles.closedLabel}>offline</Text>
+              )}
+
+              {showRedirectCta ? (
+                <Pressable accessibilityRole="button" onPress={handleRedirectPredictionPress} style={styles.predictCta}>
+                  <Text style={styles.predictCtaText}>
+                    {canEditOrPredict ? (prediction ? "Editar palpite" : "Ir para Palpites") : "Ver Palpites"}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </>
+          ) : (
+            <>
+              {prediction ? (
+                <>
+                  <Text style={styles.predictionScore}>Enviado</Text>
+                  <Text style={styles.railHint}>detalhes em Palpites</Text>
+                  {canEditOrPredict ? (
+                    <Pressable accessibilityRole="button" onPress={onPredict} style={styles.predictCta}>
+                      <Text style={styles.predictCtaText}>Editar</Text>
+                    </Pressable>
+                  ) : (
+                    <Text style={styles.railHint}>fechado</Text>
+                  )}
+                </>
+              ) : canEditOrPredict ? (
+                <Pressable accessibilityRole="button" onPress={onPredict} style={styles.predictCta}>
+                  <Text style={styles.predictCtaText}>Palpitar</Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.closedLabel}>offline</Text>
+              )}
+            </>
           )}
         </View>
       </View>
@@ -207,7 +211,7 @@ const MatchCardBase = ({
           )}
           <Text numberOfLines={1} style={styles.stateText}>
             {prediction
-              ? canEditOrPredict ? "Enviado, ainda edit√°vel" : "Enviado e fechado"
+              ? canEditOrPredict ? "Enviado, ainda edit·vel" : "Enviado e fechado"
               : canEditOrPredict
                 ? "Janela aberta"
                 : predictionAccess.state === "not_open"
@@ -302,58 +306,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "900"
   },
-  teams: {
-    flex: 1,
-    gap: spacing.xs
-  },
-  teamLine: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.xs,
-    minHeight: 31
-  },
-  badge: {
-    alignItems: "center",
-    backgroundColor: colors.surfaceDeep,
-    borderColor: colors.border,
-    borderRadius: radius.xs,
-    borderWidth: 1,
-    height: 26,
-    justifyContent: "center",
-    overflow: "hidden",
-    width: 26
-  },
-  badgeText: {
-    color: colors.gold,
-    fontSize: 11,
-    fontWeight: "900"
-  },
-  logo: {
-    height: 19,
-    width: 24
-  },
-  teamName: {
-    color: colors.text,
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "900"
-  },
-  scoreBadge: {
-    alignItems: "center",
-    backgroundColor: colors.surfaceDeep,
-    borderColor: colors.border,
-    borderRadius: radius.xs,
-    borderWidth: 1,
-    height: 28,
-    justifyContent: "center",
-    minWidth: 30
-  },
-  scoreText: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: "900",
-    textAlign: "right"
-  },
   actionRail: {
     alignItems: "center",
     backgroundColor: colors.surfaceDeep,
@@ -380,19 +332,17 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 10,
     fontWeight: "900",
-    marginBottom: 2,
     textTransform: "uppercase"
   },
   predictionScore: {
     color: colors.gold,
-    fontSize: 21,
+    fontSize: 18,
     fontWeight: "900"
   },
   railHint: {
     color: colors.muted,
     fontSize: 9,
     fontWeight: "900",
-    marginTop: 1,
     textTransform: "uppercase"
   },
   predictCta: {
@@ -401,7 +351,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.xs,
     justifyContent: "center",
     minHeight: 30,
-    paddingHorizontal: spacing.xs
+    paddingHorizontal: spacing.sm
   },
   predictCtaText: {
     color: colors.black,

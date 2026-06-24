@@ -24,6 +24,53 @@ const safeFormatDateTime = (value?: string | null) => {
 
 const getPredictionMatch = (prediction: Prediction, matches: Match[]) =>
   matches.find((item) => item.id === prediction.match_id) ?? null;
+type PredictionRow = {
+  category: PredictionCategory;
+  displayStatus: ReturnType<typeof getPredictionDisplayStatus>;
+  match: Match | null;
+  prediction: Prediction;
+};
+
+const readDateTime = (value?: string | null) => {
+  if (!value) return 0;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+};
+
+const getPredictionCategoryPriority = (category: PredictionCategory) => {
+  switch (category) {
+    case "live":
+      return 0;
+    case "waiting":
+      return 1;
+    case "scored":
+      return 2;
+    case "unavailable":
+      return 3;
+  }
+};
+
+const sortPredictionRows = (rows: PredictionRow[], selectedCategory: CategoryFilter) => {
+  return [...rows].sort((a, b) => {
+    const priorityDiff =
+      selectedCategory === "all"
+        ? getPredictionCategoryPriority(a.category) - getPredictionCategoryPriority(b.category)
+        : 0;
+
+    if (priorityDiff !== 0) return priorityDiff;
+
+    const aMatchTime = readDateTime(a.match?.start_time);
+    const bMatchTime = readDateTime(b.match?.start_time);
+    const aSubmittedAt = readDateTime(a.prediction.submitted_at);
+    const bSubmittedAt = readDateTime(b.prediction.submitted_at);
+
+    if (a.category === "scored" || a.category === "unavailable") {
+      return bSubmittedAt - aSubmittedAt;
+    }
+
+    return aMatchTime - bMatchTime;
+  });
+};
 
 const categoryFilters: Array<{ id: CategoryFilter; label: string }> = [
   { id: "all", label: "Todos" },
@@ -85,10 +132,14 @@ export const PredictionsScreen = ({
     filter.id !== "unavailable" || counts.unavailable > 0
   );
 
-  const filteredRows = useMemo(() => {
-    if (selectedCategory === "all") return rows;
-    return rows.filter((row) => row.category === selectedCategory);
-  }, [rows, selectedCategory]);
+const filteredRows = useMemo(() => {
+  const nextRows =
+    selectedCategory === "all"
+      ? rows
+      : rows.filter((row) => row.category === selectedCategory);
+
+  return sortPredictionRows(nextRows, selectedCategory);
+}, [rows, selectedCategory]);
 
   return (
     <ScreenScroll>

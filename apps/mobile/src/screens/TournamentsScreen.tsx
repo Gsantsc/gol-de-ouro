@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { CalendarDays } from "lucide-react-native";
-import type { Match, MatchStatus, Prediction, Tournament } from "../shared";
+import type { Match, Prediction, Tournament } from "../shared";
 import {
-  MATCH_STATUS_LABELS,
   TOURNAMENT_LABELS,
+  getPredictionWindowState,
   groupMatchesByDate,
   isMatchFinished,
   isMatchLive,
@@ -15,6 +15,48 @@ import {
 import { MatchCard } from "../components/MatchCard";
 import { Card, EmptyState, SectionTitle } from "../components/ui";
 import { colors, radius, spacing } from "../theme/tokens";
+
+type GamesStatusFilter = "all" | "open" | "waiting" | "live" | "closed";
+
+const STATUS_FILTER_LABELS: Record<GamesStatusFilter, string> = {
+  all: "Todos",
+  open: "Abertos",
+  waiting: "Aguardando",
+  live: "Ao vivo",
+  closed: "Fechados"
+};
+
+const getMatchSortPriority = (
+  match: Match,
+  now: Date,
+  predictionLockMinutes: number
+) => {
+  if (isMatchLive(match, now)) return 0;
+  if (isMatchOpenForPrediction(match, now, predictionLockMinutes)) return 1;
+
+  const windowState = getPredictionWindowState(match, now, predictionLockMinutes);
+
+  if (windowState === "not_open" && !isMatchFinished(match)) return 2;
+  if (!isMatchFinished(match)) return 3;
+
+  return 4;
+};
+
+const sortMatchesByStatus = (
+  matches: Match[],
+  now: Date,
+  predictionLockMinutes: number
+) => {
+  return [...matches].sort((a, b) => {
+    const priorityDiff =
+      getMatchSortPriority(a, now, predictionLockMinutes) -
+      getMatchSortPriority(b, now, predictionLockMinutes);
+
+    if (priorityDiff !== 0) return priorityDiff;
+
+    return new Date(a.start_time).getTime() - new Date(b.start_time).getTime();
+  });
+};
 
 export const TournamentsScreen = ({
   matches,
@@ -36,7 +78,7 @@ export const TournamentsScreen = ({
     [tournaments],
   );
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | undefined>();
-  const [statusFilter, setStatusFilter] = useState<"all" | MatchStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<GamesStatusFilter>("all");
 
   useEffect(() => {
     if (selectedTournamentId) return;
@@ -58,14 +100,22 @@ export const TournamentsScreen = ({
   }, [matches, selectedTournamentId, worldCupMatches, worldCupTournament?.id]);
   const statusFilteredMatches = useMemo(() => {
     const now = new Date();
-    return selectedMatches.filter((match) => {
+
+    const filtered = selectedMatches.filter((match) => {
+      const windowState = getPredictionWindowState(match, now, predictionLockMinutes);
+
       if (statusFilter === "all") return true;
-      if (statusFilter === "aberto") return isMatchOpenForPrediction(match, now, predictionLockMinutes);
-      if (statusFilter === "ao_vivo") return isMatchLive(match, now);
-      if (statusFilter === "encerrado") return isMatchFinished(match);
-      return false;
+      if (statusFilter === "open") return isMatchOpenForPrediction(match, now, predictionLockMinutes);
+      if (statusFilter === "waiting") return windowState === "not_open" && !isMatchLive(match, now) && !isMatchFinished(match);
+      if (statusFilter === "live") return isMatchLive(match, now);
+      if (statusFilter === "closed") return windowState === "closed" && !isMatchLive(match, now);
+
+      return true;
     });
+
+    return sortMatchesByStatus(filtered, now, predictionLockMinutes);
   }, [predictionLockMinutes, selectedMatches, statusFilter]);
+
   const matchGroups = useMemo(() => groupMatchesByDate(statusFilteredMatches), [statusFilteredMatches]);
 
   const header = (
@@ -94,9 +144,9 @@ export const TournamentsScreen = ({
       </ScrollView>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
         <View style={styles.statusList}>
-          {(["all", "aberto", "ao_vivo", "encerrado"] as Array<"all" | MatchStatus>).map((status) => {
+          {(["all", "open", "waiting", "live", "closed"] as GamesStatusFilter[]).map((status) => {
             const active = statusFilter === status;
-            const label = status === "all" ? "Todos" : MATCH_STATUS_LABELS[status];
+            const label = STATUS_FILTER_LABELS[status];
             return (
               <Pressable
                 key={status}
@@ -120,7 +170,7 @@ export const TournamentsScreen = ({
         </View>
       </View>
 
-      <SectionTitle title="Agenda" />
+      <SectionTitle title="Jogos organizados por status" />
     </View>
   );
 

@@ -35,11 +35,13 @@ const categoryFilters: Array<{ id: CategoryFilter; label: string }> = [
 
 export const PredictionsScreen = ({
   matches,
+  onViewGames,
   players,
   predictions,
   ranking
 }: {
   matches: Match[];
+  onViewGames?: () => void;
   players: Player[];
   predictionLockMinutes: number;
   predictions: Prediction[];
@@ -148,10 +150,12 @@ export const PredictionsScreen = ({
           )}
         </>
       ) : (
-        <EmptyState
-          title="Sem palpites"
-          body="Quando voce enviar um palpite, ele aparece aqui com placar, status e pontos."
-        />
+          <EmptyState
+  title="Sem palpites"
+  body="Voce ainda nao enviou nenhum palpite. Entre em Jogos, escolha uma partida disponivel e envie seu primeiro palpite."
+  actionLabel={onViewGames ? "Ir para jogos" : undefined}
+  onAction={onViewGames}
+/>
       )}
 
       <View style={styles.bottomSpacer} />

@@ -340,7 +340,7 @@ export const styles = StyleSheet.create({
   },
   screenContent: {
     gap: spacing.md,
-    paddingBottom: 104
+    paddingBottom: 152
   },
   container: {
     alignSelf: "center",
@@ -509,15 +509,16 @@ export const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: spacing.md
   },
-  metricTile: {
-    backgroundColor: colors.whiteSoft,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    flex: 1,
-    minWidth: 100,
-    padding: spacing.sm
-  },
+metricTile: {
+  backgroundColor: colors.whiteSoft,
+  borderColor: colors.border,
+  borderRadius: radius.sm,
+  borderWidth: 1,
+  flex: 1,
+  flexBasis: 132,
+  minWidth: 132,
+  padding: spacing.sm
+},
   metricTop: {
     alignItems: "center",
     flexDirection: "row",

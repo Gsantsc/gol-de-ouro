@@ -48,7 +48,6 @@ const boolLabel = (value?: boolean | null) => {
   if (value === false) return "Nao";
   return "-";
 };
-
 const resolvePredictionPlayerLabel = ({
   playerId,
   fallbackName,

@@ -86,17 +86,30 @@ const dedupeByKey = <T,>(rows: T[], getKey: (row: T) => string) => {
   return [...map.values()];
 };
 
-const predictionPointsFor = (match: MatchRow, prediction: PredictionRow) =>
-  calculatePredictionPoints(
+const predictionPointsFor = (match: MatchRow, prediction: PredictionRow) => {
+  const homeScore = Number(match.home_score ?? 0);
+  const awayScore = Number(match.away_score ?? 0);
+  const isNoGoalMatch = homeScore === 0 && awayScore === 0;
+
+  const redCardCount = Number(match.red_cards_home ?? 0) + Number(match.red_cards_away ?? 0);
+
+  const officialRedCard =
+    redCardCount > 0
+      ? true
+      : match.red_card_happened !== null && match.red_card_happened !== undefined
+        ? match.red_card_happened
+        : undefined;
+
+  return calculatePredictionPoints(
     {
-      awayScore: Number(match.away_score ?? 0),
-      firstGoalNoGoals: match.first_goal_no_goals,
-      firstScorer: match.first_goal_scorer,
-      firstScorerId: match.first_goal_scorer_id,
-      homeScore: Number(match.home_score ?? 0),
+      awayScore,
+      firstGoalNoGoals: isNoGoalMatch ? true : match.first_goal_no_goals,
+      firstScorer: isNoGoalMatch ? null : match.first_goal_scorer,
+      firstScorerId: isNoGoalMatch ? null : match.first_goal_scorer_id,
+      homeScore,
       manOfMatch: match.man_of_match,
       manOfMatchId: match.man_of_match_id,
-      redCard: match.red_card_happened ?? (Number(match.red_cards_home ?? 0) + Number(match.red_cards_away ?? 0) > 0),
+      redCard: officialRedCard,
     },
     {
       awayScore: Number(prediction.predicted_away_score ?? 0),
@@ -111,6 +124,7 @@ const predictionPointsFor = (match: MatchRow, prediction: PredictionRow) =>
       winner: prediction.predicted_winner,
     },
   );
+};
 
 const skipReasonForMatch = (match: MatchRow, matchPredictions: PredictionRow[]) => {
   if (isMatchProcessableForRecalculate(match, matchPredictions)) return null;

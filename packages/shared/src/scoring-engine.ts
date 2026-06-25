@@ -51,20 +51,25 @@ export const calculatePredictionPoints = (
   const winner = prediction.winner ?? predictionOutcome(prediction);
   const sameOutcome = predictionOutcome(official) === winner;
   const sameGoalDifference = official.homeScore - official.awayScore === prediction.homeScore - prediction.awayScore;
-  const firstScorer =
-    (official.firstGoalNoGoals === true && prediction.firstGoalNoGoals === true)
-    || (
-      official.firstScorerId !== null
-      && official.firstScorerId !== undefined
-      && prediction.firstScorerId !== null
-      && prediction.firstScorerId !== undefined
-      && official.firstScorerId === prediction.firstScorerId
-    )
-    || (
-      official.firstScorerId == null
-      && prediction.firstScorerId == null
-      && normalizeMarketText(official.firstScorer) !== null
-      && normalizeMarketText(official.firstScorer) === normalizeMarketText(prediction.firstScorer)
+ const isNoGoalMatch = official.homeScore === 0 && official.awayScore === 0;
+
+const firstScorer = isNoGoalMatch
+  ? prediction.firstGoalNoGoals === true
+  : (
+      (official.firstGoalNoGoals === true && prediction.firstGoalNoGoals === true)
+      || (
+        official.firstScorerId !== null
+        && official.firstScorerId !== undefined
+        && prediction.firstScorerId !== null
+        && prediction.firstScorerId !== undefined
+        && official.firstScorerId === prediction.firstScorerId
+      )
+      || (
+        official.firstScorerId == null
+        && prediction.firstScorerId == null
+        && normalizeMarketText(official.firstScorer) !== null
+        && normalizeMarketText(official.firstScorer) === normalizeMarketText(prediction.firstScorer)
+      )
     );
   const bothTeamsScore =
     prediction.bothTeamsScore !== null

@@ -1,12 +1,12 @@
 // CHAMPIONSHIPS SCREEN FIX - Display only supported championships from database
 // FRONTEND LEAGUE FILTER FIX - No hardcoded fallback, use database data only
 import { Share, StyleSheet, Text, View } from "react-native";
-import { Copy, LogOut, Plus, Share2, XCircle } from "lucide-react-native";
+import { Copy, LogOut, Plus, Share2, Trophy, Users, XCircle } from "lucide-react-native";
 import Svg, { Rect } from "react-native-svg";
 import type { Group, GroupMember, Ranking, Tournament } from "../shared";
 import { createQrMatrix } from "../shared";
 import { useEffect, useState } from "react";
-import { AppButton, Card, Field, SectionTitle, ToastBanner } from "../components/ui";
+import { AppButton, Card, EmptyState, Field, MetricTile, Pill, SectionTitle, ToastBanner } from "../components/ui";
 import {
   closeGroup,
   createGroup,
@@ -86,6 +86,25 @@ export const GroupsScreen = ({
   return (
     <>
       {toast ? <ToastBanner message={toast.message} tone={toast.tone} /> : null}
+      <Card variant="hero">
+        <View style={styles.heroCopy}>
+          <Pill tone="gold">Competicao entre amigos</Pill>
+          <Text style={styles.heroTitle}>Ligas do bolao</Text>
+          <Text style={styles.heroBody}>
+            Crie grupos, compartilhe convites e acompanhe o ranking interno.
+          </Text>
+        </View>
+        <View style={styles.heroStats}>
+          <MetricTile icon={<Trophy color={colors.gold} size={18} />} label="Ligas" tone="gold" value={groups.length} />
+          <MetricTile icon={<Users color={colors.blue} size={18} />} label="Participantes" tone="blue" value={members.length} />
+          <MetricTile
+            icon={<Share2 color={colors.green} size={18} />}
+            label="Convites ativos"
+            value={groups.filter((group) => group.invite_active).length}
+          />
+        </View>
+      </Card>
+
       <SectionTitle title="Criar nova liga" />
       <Card>
         <View style={styles.form}>
@@ -131,7 +150,7 @@ export const GroupsScreen = ({
         const webLink = inviteLinkFor(group);
 
         return (
-          <Card key={group.id}>
+          <Card key={group.id} style={selected && styles.groupSelected}>
             <View style={styles.groupHeader}>
               <View style={styles.groupInfo}>
                 <Text style={styles.groupName}>{group.name}</Text>
@@ -289,16 +308,12 @@ export const GroupsScreen = ({
         );
       })}
       {!groups.length && (
-        <Card>
-          <Text style={styles.muted}>Você ainda não participa de ligas.</Text>
-          <View style={styles.emptyAction}>
-            <AppButton
-              icon={<Plus color={colors.black} size={18} />}
-              onPress={() => setGroupName("")}
-              title="Criar liga"
-            />
-          </View>
-        </Card>
+        <EmptyState
+          title="Nenhuma liga ainda"
+          body="Crie uma liga para disputar o ranking com amigos e compartilhar o convite do bolao."
+          actionLabel="Criar liga"
+          onAction={() => setGroupName("")}
+        />
       )}
     </>
   );
@@ -323,6 +338,27 @@ const MiniQr = ({ value }: { value: string }) => {
 };
 
 const styles = StyleSheet.create({
+  heroCopy: {
+    gap: spacing.xs
+  },
+  heroTitle: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: "900",
+    lineHeight: 32
+  },
+  heroBody: {
+    color: colors.mutedStrong,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 21
+  },
+  heroStats: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginTop: spacing.md
+  },
   actions: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -356,6 +392,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing.md,
     justifyContent: "space-between"
+  },
+  groupSelected: {
+    borderColor: colors.borderGoldStrong
   },
   groupInfo: {
     flex: 1
@@ -419,12 +458,6 @@ const styles = StyleSheet.create({
     color: colors.gold,
     fontSize: 12,
     marginTop: spacing.sm
-  },
-  muted: {
-    color: colors.muted
-  },
-  emptyAction: {
-    marginTop: spacing.md
   },
   memberName: {
     color: colors.text,

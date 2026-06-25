@@ -173,6 +173,20 @@ const adminStatusClass: Record<MatchStatus, string> = {
   encerrado: "border-pitch-600 bg-pitch-900/70 text-white/55"
 };
 
+const userStatusClass: Record<string, string> = {
+  approved: "status-approved",
+  pending: "status-pending",
+  rejected: "status-rejected",
+  suspended: "status-suspended"
+};
+
+const userStatusLabel: Record<string, string> = {
+  approved: "Aprovado",
+  pending: "Pendente",
+  rejected: "Rejeitado",
+  suspended: "Suspenso"
+};
+
 const betaFeedbackTypeLabel: Record<BetaFeedback["type"], string> = {
   problem: "Problema",
   suggestion: "Sugestão"
@@ -183,6 +197,13 @@ const betaFeedbackStatusLabel: Record<BetaFeedback["status"], string> = {
   open: "Aberto",
   resolved: "Resolvido",
   reviewing: "Em análise"
+};
+
+const betaFeedbackStatusClass: Record<BetaFeedback["status"], string> = {
+  dismissed: "badge-muted",
+  open: "badge-gold",
+  resolved: "badge-green",
+  reviewing: "badge-blue"
 };
 
 export default function AdminPage() {
@@ -342,7 +363,7 @@ export default function AdminPage() {
 
   return (
     <Shell>
-      <header className="mb-6 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+      <header className="panel mb-6 flex flex-col gap-5 overflow-hidden p-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <BrandLogo compact />
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -529,13 +550,13 @@ const LoginCard = ({
 
 const Dashboard = ({ data }: { data: AdminState }) => {
   const metrics = [
-    { label: "Total de usuários", value: data.metrics.total_users, icon: Users },
-    { label: "Pendentes", value: data.metrics.pending_users, icon: Activity },
-    { label: "Aprovados", value: data.metrics.approved_users, icon: UserCheck },
-    { label: "Partidas abertas", value: data.metrics.open_matches, icon: ShieldCheck },
-    { label: "Ao vivo", value: data.metrics.live_matches, icon: Activity },
-    { label: "Encerradas", value: data.metrics.finished_matches, icon: Trophy },
-    { label: "Palpites enviados", value: data.metrics.total_predictions, icon: ClipboardList }
+    { label: "Total de usuários", value: data.metrics.total_users, icon: Users, tone: "badge-blue" },
+    { label: "Pendentes", value: data.metrics.pending_users, icon: Activity, tone: "badge-gold" },
+    { label: "Aprovados", value: data.metrics.approved_users, icon: UserCheck, tone: "badge-green" },
+    { label: "Partidas abertas", value: data.metrics.open_matches, icon: ShieldCheck, tone: "badge-green" },
+    { label: "Ao vivo", value: data.metrics.live_matches, icon: Activity, tone: "badge-red" },
+    { label: "Encerradas", value: data.metrics.finished_matches, icon: Trophy, tone: "badge-muted" },
+    { label: "Palpites enviados", value: data.metrics.total_predictions, icon: ClipboardList, tone: "badge-gold" }
   ];
   const statusBars = [
     { label: "Abertas", value: data.metrics.open_matches, className: "bg-grass" },
@@ -560,7 +581,7 @@ const Dashboard = ({ data }: { data: AdminState }) => {
             <div className="metric-card" key={metric.label}>
               <div className="mb-4 flex items-center justify-between">
                 <Icon className="h-5 w-5 text-gold" />
-                <span className="badge badge-gold">live</span>
+                <span className={`badge ${metric.tone}`}>status</span>
               </div>
               <p className="text-3xl font-black">{metric.value}</p>
               <p className="mt-1 text-sm font-bold text-white/60">{metric.label}</p>
@@ -615,7 +636,7 @@ const Dashboard = ({ data }: { data: AdminState }) => {
                   </p>
                   <p className="text-xs text-white/55">{formatFullDatePtBr(match.start_time)}</p>
                 </div>
-                <span className="badge badge-gold">
+                <span className={`badge ${adminStatusClass[match.status]}`}>
                   {MATCH_STATUS_LABELS[match.status]}
                 </span>
               </div>
@@ -640,7 +661,9 @@ const Dashboard = ({ data }: { data: AdminState }) => {
                       {feedback.user?.name ?? feedback.user?.email ?? "Usuário beta"}
                     </p>
                   </div>
-                  <span className="badge badge-gold">{betaFeedbackStatusLabel[feedback.status]}</span>
+                  <span className={`badge ${betaFeedbackStatusClass[feedback.status]}`}>
+                    {betaFeedbackStatusLabel[feedback.status]}
+                  </span>
                 </div>
                 <p className="mt-3 line-clamp-3 text-sm leading-6 text-white/65">{feedback.description}</p>
                 <p className="mt-3 text-xs font-bold text-white/40">
@@ -762,9 +785,14 @@ const UsersPanel = ({
                 <td className="text-white/65">{user.email}</td>
                 <td className="text-white/65">{formatFullDatePtBr(user.created_at)}</td>
                 <td>
-                  <span className="rounded-full border border-white/10 px-3 py-1 text-xs font-black text-gold">
-                    {user.status ?? (user.blocked ? "suspended" : user.approval_status)}
-                  </span>
+                  {(() => {
+                    const currentStatus = user.status ?? (user.blocked ? "suspended" : user.approval_status) ?? "pending";
+                    return (
+                      <span className={`badge ${userStatusClass[currentStatus] ?? "badge-muted"}`}>
+                        {userStatusLabel[currentStatus] ?? currentStatus}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td>{user.groups_count}</td>
                 <td>{user.predictions_count}</td>
@@ -1524,7 +1552,7 @@ const AdminMatchCard = memo(function AdminMatchCard({
   ).toISOString();
 
   return (
-    <article className="overflow-hidden rounded-lg border border-pitch-600 bg-pitch-800 shadow-panel transition hover:border-gold/25">
+    <article className="overflow-hidden rounded-lg border border-white/10 bg-pitch-800/95 shadow-panel transition hover:border-gold/30">
       <header className={`flex flex-col gap-3 border-b border-pitch-600 px-4 md:flex-row md:items-center md:justify-between ${isCompact ? "py-2.5" : "py-3"}`}>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -1584,7 +1612,7 @@ const AdminMatchCard = memo(function AdminMatchCard({
         </div>
       </div>
 
-      <footer className="grid gap-3 border-t border-pitch-600 bg-pitch-950/20 px-4 py-3 xl:grid-cols-[auto_minmax(0,1fr)_auto] xl:items-end">
+      <footer className="grid gap-3 border-t border-white/10 bg-pitch-950/35 px-4 py-3 xl:grid-cols-[auto_minmax(0,1fr)_auto] xl:items-end">
         <div className="grid grid-cols-2 gap-2">
           <label className="block">
             <span className="mb-1 block text-xs font-black uppercase text-white/45">Casa</span>
@@ -1829,8 +1857,15 @@ const TournamentsPanel = ({
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {tournaments.map((tournament) => (
           <div className="panel p-5" key={tournament.id}>
-            <p className="text-lg font-black">{tournament.name}</p>
-            <p className="mt-1 text-sm text-white/55">{TOURNAMENT_LABELS[tournament.type]}</p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-lg font-black">{tournament.name}</p>
+                <p className="mt-1 text-sm text-white/55">{TOURNAMENT_LABELS[tournament.type]}</p>
+              </div>
+              <span className={`badge ${tournament.active ? "badge-green" : "badge-muted"}`}>
+                {tournament.active ? "Ativo" : "Inativo"}
+              </span>
+            </div>
             <button
               className={tournament.active ? "btn-ghost mt-5 w-full" : "btn-primary mt-5 w-full"}
               disabled={busy}
@@ -1933,7 +1968,7 @@ const GroupsPanel = ({
                     {group.tournament?.name ?? group.championship_id} - {groupMembers.length} participantes
                   </p>
                 </div>
-                <span className="rounded-full border border-white/10 px-3 py-1 text-xs font-black text-gold">
+                <span className={`badge ${group.closed_at ? "badge-muted" : "badge-green"}`}>
                   {group.closed_at ? "Fechado" : "Ativo"}
                 </span>
               </div>
@@ -2107,9 +2142,10 @@ const CompetitionsPanel = ({
           return (
             <div className="panel p-5" key={competition.id}>
               <p className="text-xl font-black">{competition.name}</p>
-              <p className="mt-1 text-sm text-white/55">
-                {linkedGroups.length} grupos vinculados - {competition.status}
-              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-sm text-white/55">{linkedGroups.length} grupos vinculados</span>
+                <span className="badge badge-gold">{competition.status}</span>
+              </div>
               <div className="mt-5 space-y-3">
                 {rankedGroups.map((group, index) => (
                   <div className="flex items-center justify-between rounded-md border border-white/10 p-3" key={group.id}>
@@ -2354,7 +2390,7 @@ const Toast = ({ notice, onClose }: { notice: ToastMessage; onClose: () => void 
   }, [notice, onClose]);
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 w-[min(92vw,380px)] rounded-lg border border-white/10 bg-pitch-800 p-4 shadow-panel">
+    <div className={`fixed bottom-5 right-5 z-50 w-[min(92vw,380px)] rounded-lg border p-4 shadow-panel ${notice.kind === "success" ? "border-grass/35 bg-pitch-800" : "border-red-400/35 bg-red-950/70"}`}>
       <div className="flex items-start gap-3">
         <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${notice.kind === "success" ? "bg-grass" : "bg-red-400"}`} />
         <p className="min-w-0 flex-1 text-sm font-bold leading-6 text-white/85">{notice.message}</p>
@@ -2469,8 +2505,11 @@ const IconButton = ({
 );
 
 const ErrorBanner = ({ message }: { message: string }) => (
-  <div className="mb-6 rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm font-bold text-red-100">
-    {message}
+  <div className="mb-6 rounded-lg border border-red-400/40 bg-red-500/10 p-4 text-sm font-bold text-red-100 shadow-panel">
+    <div className="flex items-start gap-3">
+      <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-red-400" />
+      <span className="min-w-0 flex-1">{message}</span>
+    </div>
   </div>
 );
 

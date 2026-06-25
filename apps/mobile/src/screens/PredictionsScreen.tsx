@@ -10,7 +10,7 @@ import {
   type PredictionCategory
 } from "../shared";
 import { PredictionCard } from "../components/PredictionCard";
-import { Card, EmptyState, MetricTile, ScreenScroll, SectionTitle } from "../components/ui";
+import { Card, EmptyState, MetricTile, Pill, ScreenScroll, SectionTitle } from "../components/ui";
 import { colors, radius, spacing } from "../theme/tokens";
 
 type CategoryFilter = "all" | PredictionCategory;
@@ -143,17 +143,26 @@ const filteredRows = useMemo(() => {
 
   return (
     <ScreenScroll>
-      <SectionTitle title="Meus Palpites" />
+      <Card variant="hero">
+        <View style={styles.headerCopy}>
+          <Pill tone="gold">Central de palpites</Pill>
+          <Text style={styles.headerTitle}>Meus Palpites</Text>
+          <Text style={styles.headerBody}>
+            Acompanhe status, pontos e extras escolhidos em cada partida.
+          </Text>
+        </View>
 
-      <View style={styles.metrics}>
-        <MetricTile icon={<Target color={colors.green} size={18} />} label="Enviados" value={safePredictions.length} />
-        <MetricTile icon={<CheckCircle2 color={colors.gold} size={18} />} label="Processados" tone="gold" value={counts.scored} />
-        <MetricTile icon={<Clock3 color={colors.blue} size={18} />} label="Pontos" tone="blue" value={performance.totalPoints} />
-        <MetricTile icon={<RadioTower color={colors.gold} size={18} />} label="Aguardando" tone="gold" value={counts.waiting} />
-      </View>
+        <View style={styles.metrics}>
+          <MetricTile icon={<Target color={colors.green} size={18} />} label="Enviados" value={safePredictions.length} />
+          <MetricTile icon={<CheckCircle2 color={colors.gold} size={18} />} label="Pontuados" tone="gold" value={counts.scored} />
+          <MetricTile icon={<Clock3 color={colors.blue} size={18} />} label="Pontos" tone="blue" value={performance.totalPoints} />
+          <MetricTile icon={<RadioTower color={colors.gold} size={18} />} label="Aguardando" tone="gold" value={counts.waiting} />
+        </View>
+      </Card>
 
       {safePredictions.length ? (
         <>
+          <SectionTitle title="Filtrar por status" />
           <ScrollView
             contentContainerStyle={styles.filterRow}
             horizontal
@@ -201,12 +210,12 @@ const filteredRows = useMemo(() => {
           )}
         </>
       ) : (
-          <EmptyState
-  title="Sem palpites"
-  body="Voce ainda nao enviou nenhum palpite. Entre em Jogos, escolha uma partida disponivel e envie seu primeiro palpite."
-  actionLabel={onViewGames ? "Ir para jogos" : undefined}
-  onAction={onViewGames}
-/>
+        <EmptyState
+          title="Sem palpites"
+          body="Voce ainda nao enviou nenhum palpite. Entre em Jogos, escolha uma partida disponivel e envie seu primeiro palpite."
+          actionLabel={onViewGames ? "Ir para jogos" : undefined}
+          onAction={onViewGames}
+        />
       )}
 
       <View style={styles.bottomSpacer} />
@@ -215,10 +224,26 @@ const filteredRows = useMemo(() => {
 };
 
 const styles = StyleSheet.create({
+  headerCopy: {
+    gap: spacing.xs
+  },
+  headerTitle: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: "900",
+    lineHeight: 32
+  },
+  headerBody: {
+    color: colors.mutedStrong,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 21
+  },
   metrics: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: spacing.sm
+    gap: spacing.sm,
+    marginTop: spacing.md
   },
   filterRow: {
     gap: spacing.xs,

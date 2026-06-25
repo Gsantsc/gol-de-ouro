@@ -344,6 +344,7 @@ tournaments
           onViewGames={() => setActiveTab("games")}
           onViewGroups={() => setActiveTab("groups")}
           onViewPredictions={() => setActiveTab("predictions")}
+          onViewRanking={() => setActiveTab("ranking")}
           notifications={notifications}
           position={position}
           predictionLockMinutes={predictionLockMinutes}
@@ -372,6 +373,7 @@ tournaments
 />
       ) : activeTab === "ranking" ? (
         <RankingScreen
+          competitionRanking={competitionRanking}
           groups={groups}
           members={groupMembers}
           ranking={ranking}

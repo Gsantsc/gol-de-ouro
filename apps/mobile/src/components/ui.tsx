@@ -11,20 +11,18 @@ import {
 import type { StyleProp, ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { AlertCircle, CheckCircle2, Info, RefreshCw, Trophy } from "lucide-react-native";
-import { colors, radius, spacing, typography } from "../theme/tokens";
+import { colors, elevation, gradients, radius, spacing, statusColors, typography } from "../theme/tokens";
 
 type Children = { children: ReactNode };
-type Tone = "default" | "green" | "gold" | "red" | "blue";
+type Tone = "default" | "green" | "gold" | "red" | "blue" | "amber";
 type ToastTone = "success" | "error" | "warning" | "info";
-
-const gradient = [colors.background, colors.backgroundAlt, colors.background] as const;
 
 export const AppViewport = ({
   children,
   footer,
   toast
 }: Children & { footer?: ReactNode; toast?: ReactNode }) => (
-  <LinearGradient colors={gradient} style={styles.root}>
+  <LinearGradient colors={gradients.app} style={styles.root}>
     <View pointerEvents="none" style={styles.lightTop} />
     <View pointerEvents="none" style={styles.lightBottom} />
     <View style={styles.viewport}>
@@ -36,7 +34,7 @@ export const AppViewport = ({
 );
 
 export const Screen = ({ children }: Children) => (
-  <LinearGradient colors={gradient} style={styles.root}>
+  <LinearGradient colors={gradients.app} style={styles.root}>
     <View pointerEvents="none" style={styles.lightTop} />
     <ScrollView contentContainerStyle={styles.screen} keyboardShouldPersistTaps="handled">
       <View style={styles.container}>{children}</View>
@@ -58,9 +56,15 @@ export const Card = ({
   children,
   style,
   variant = "default"
-}: Children & { style?: StyleProp<ViewStyle>; variant?: "default" | "soft" | "accent" }) => (
+}: Children & { style?: StyleProp<ViewStyle>; variant?: "default" | "soft" | "accent" | "hero" }) => (
   <View style={[styles.card, variant === "soft" && styles.cardSoft, variant === "accent" && styles.cardAccent, style]}>
-    {children}
+    {variant === "hero" ? (
+      <LinearGradient colors={gradients.hero} style={styles.cardHero}>
+        {children}
+      </LinearGradient>
+    ) : (
+      children
+    )}
   </View>
 );
 
@@ -83,12 +87,45 @@ export const Pill = ({ children, tone = "default" }: Children & { tone?: Tone })
     green: styles.pill_green,
     gold: styles.pill_gold,
     red: styles.pill_red,
-    blue: styles.pill_blue
+    blue: styles.pill_blue,
+    amber: styles.pill_amber
   };
 
   return (
     <View style={[styles.pill, toneStyles[tone]]}>
-      <Text style={[styles.pillText, tone === "green" && styles.pillTextGreen]}>{children}</Text>
+      <Text
+        style={[
+          styles.pillText,
+          tone === "green" && styles.pillTextGreen,
+          tone === "gold" && styles.pillTextGold,
+          tone === "red" && styles.pillTextRed,
+          tone === "blue" && styles.pillTextBlue,
+          tone === "amber" && styles.pillTextAmber
+        ]}
+      >
+        {children}
+      </Text>
+    </View>
+  );
+};
+
+export const StatusBadge = ({
+  label,
+  status
+}: {
+  label: string;
+  status: keyof typeof statusColors;
+}) => {
+  const statusStyle = statusColors[status];
+
+  return (
+    <View
+      style={[
+        styles.statusBadge,
+        { backgroundColor: statusStyle.background, borderColor: statusStyle.border }
+      ]}
+    >
+      <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>{label}</Text>
     </View>
   );
 };
@@ -298,6 +335,15 @@ export const Skeleton = ({
   </>
 );
 
+export const LoadingState = ({ label = "Carregando" }: { label?: string }) => (
+  <Card variant="soft">
+    <View style={styles.loadingState}>
+      <ActivityIndicator color={colors.gold} />
+      <Text style={styles.loadingText}>{label}</Text>
+    </View>
+  </Card>
+);
+
 export const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -322,7 +368,7 @@ export const styles = StyleSheet.create({
   viewport: {
     alignSelf: "center",
     flex: 1,
-    maxWidth: 920,
+    maxWidth: 980,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.lg,
     width: "100%"
@@ -339,25 +385,22 @@ export const styles = StyleSheet.create({
     padding: spacing.md
   },
   screenContent: {
-    gap: spacing.md,
+    gap: spacing.lg,
     paddingBottom: 152
   },
   container: {
     alignSelf: "center",
     gap: spacing.md,
-    maxWidth: 920,
+    maxWidth: 980,
     width: "100%"
   },
   card: {
     backgroundColor: colors.surfaceGlass,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     padding: spacing.md,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.24,
-    shadowRadius: 22
+    ...elevation.card
   },
   cardSoft: {
     backgroundColor: colors.surfaceMuted
@@ -365,6 +408,12 @@ export const styles = StyleSheet.create({
   cardAccent: {
     backgroundColor: colors.goldSoft,
     borderColor: colors.borderStrong
+  },
+  cardHero: {
+    borderRadius: radius.lg,
+    margin: -spacing.md,
+    overflow: "hidden",
+    padding: spacing.md
   },
   eyebrow: {
     color: colors.gold,
@@ -424,6 +473,10 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.blueSoft,
     borderColor: colors.blueBorder
   },
+  pill_amber: {
+    backgroundColor: colors.amberSoft,
+    borderColor: colors.amberBorder
+  },
   pillText: {
     color: colors.mutedStrong,
     fontSize: typography.tiny,
@@ -432,9 +485,33 @@ export const styles = StyleSheet.create({
   pillTextGreen: {
     color: colors.green
   },
+  pillTextGold: {
+    color: colors.gold
+  },
+  pillTextRed: {
+    color: colors.red
+  },
+  pillTextBlue: {
+    color: colors.blue
+  },
+  pillTextAmber: {
+    color: colors.amber
+  },
+  statusBadge: {
+    alignSelf: "flex-start",
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4
+  },
+  statusBadgeText: {
+    fontSize: typography.tiny,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
   button: {
     alignItems: "center",
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     flexDirection: "row",
     gap: spacing.sm,
     justifyContent: "center",
@@ -448,7 +525,11 @@ export const styles = StyleSheet.create({
     paddingVertical: spacing.xs
   },
   button_primary: {
-    backgroundColor: colors.gold
+    backgroundColor: colors.gold,
+    shadowColor: colors.goldDark,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 14
   },
   button_secondary: {
     backgroundColor: colors.goldHighlight
@@ -502,23 +583,23 @@ export const styles = StyleSheet.create({
   input: {
     backgroundColor: colors.surfaceDeep,
     borderColor: colors.border,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
     color: colors.text,
     fontSize: 16,
     minHeight: 48,
     paddingHorizontal: spacing.md
   },
-metricTile: {
-  backgroundColor: colors.whiteSoft,
-  borderColor: colors.border,
-  borderRadius: radius.sm,
-  borderWidth: 1,
-  flex: 1,
-  flexBasis: 132,
-  minWidth: 132,
-  padding: spacing.sm
-},
+  metricTile: {
+    backgroundColor: colors.whiteSoft,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flex: 1,
+    flexBasis: 132,
+    minWidth: 132,
+    padding: spacing.sm
+  },
   metricTop: {
     alignItems: "center",
     flexDirection: "row",
@@ -604,5 +685,15 @@ metricTile: {
     borderRadius: radius.sm,
     marginBottom: spacing.sm,
     overflow: "hidden"
+  },
+  loadingState: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.sm
+  },
+  loadingText: {
+    color: colors.mutedStrong,
+    fontSize: 13,
+    fontWeight: "800"
   }
 });

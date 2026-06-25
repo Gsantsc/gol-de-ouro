@@ -4,7 +4,7 @@ import { Flame, LogOut, Medal, MessageCircle, Send, Target, Trophy } from "lucid
 import type { Achievement, BetaFeedbackType, Match, Prediction, Ranking } from "../shared";
 import { deriveUserPerformance } from "../shared";
 import { useAuth } from "../hooks/useAuth";
-import { AppButton, Card, MetricTile, ScreenScroll, SectionTitle, Subtitle, Title } from "../components/ui";
+import { AppButton, Card, MetricTile, Pill, ScreenScroll, SectionTitle, Subtitle, Title } from "../components/ui";
 import { colors, radius, spacing } from "../theme/tokens";
 import { submitBetaFeedback } from "../services/football.service";
 import { AchievementsScreen } from "./AchievementsScreen";
@@ -69,7 +69,7 @@ export const ProfileScreen = ({
 
   return (
     <ScreenScroll>
-      <Card variant="accent">
+      <Card variant="hero">
         <View style={styles.header}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>
@@ -82,6 +82,7 @@ export const ProfileScreen = ({
             </Text>
           </View>
           <View style={styles.headerText}>
+            <Pill tone="gold">Perfil de competidor</Pill>
             <Title>{profile?.name ?? "Perfil"}</Title>
             <Subtitle>{profile?.email}</Subtitle>
           </View>
@@ -92,7 +93,6 @@ export const ProfileScreen = ({
           <MetricTile icon={<Target color={colors.blue} size={18} />} label="Taxa de acerto" tone="blue" value={`${performance.hitRate}%`} />
           <MetricTile icon={<Flame color={colors.red} size={18} />} label="Streak" tone="red" value={performance.currentStreak} />
         </View>
-        <AppButton icon={<LogOut color={colors.text} size={16} />} title="Sair" onPress={signOut} variant="ghost" />
       </Card>
 
       <SectionTitle title="Progresso" />
@@ -123,6 +123,18 @@ export const ProfileScreen = ({
           Você tem {predictions.length} palpite(s) enviado(s). Os placares, pontos e resultados ficam organizados na aba Palpites.
         </Text>
       </Card>
+
+      <SectionTitle title="Conta" />
+      <Card>
+        <View style={styles.accountRow}>
+          <View style={styles.accountCopy}>
+            <Text style={styles.accountTitle}>Sessao ativa</Text>
+            <Text style={styles.accountBody}>Use esta acao para sair deste dispositivo.</Text>
+          </View>
+          <AppButton icon={<LogOut color={colors.text} size={16} />} title="Sair" onPress={signOut} variant="ghost" />
+        </View>
+      </Card>
+
       <SectionTitle title="Beta fechado" />
       <Card>
         <View style={styles.feedbackHeader}>
@@ -238,6 +250,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
     lineHeight: 21
+  },
+  accountRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    justifyContent: "space-between"
+  },
+  accountCopy: {
+    flex: 1,
+    minWidth: 180
+  },
+  accountTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  accountBody: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 19,
+    marginTop: 3
   },
   feedbackHeader: {
     alignItems: "center",

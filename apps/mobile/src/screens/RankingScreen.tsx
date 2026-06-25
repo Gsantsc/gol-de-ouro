@@ -44,12 +44,14 @@ export const RankingScreen = ({
   const friendsRanking = ranking.filter((item) => friendUserIds.has(item.user_id));
   const myGroups = groups.filter((group) => myGroupIds.has(group.id));
   const topThree = ranking.slice(0, 3);
+  const myRanking = ranking.find((item) => item.user_id === userId) ?? null;
+  const myPosition = myRanking ? ranking.findIndex((item) => item.user_id === userId) + 1 : null;
 
   return (
     <ScreenScroll>
       <SectionTitle title="Ranking" />
       {ranking.length ? (
-        <Card variant="accent">
+        <Card variant="hero">
           <View style={styles.podiumHeader}>
             <View>
               <Text style={styles.podiumKicker}>Destaques</Text>
@@ -83,6 +85,34 @@ export const RankingScreen = ({
           body="O ranking será preenchido automaticamente após os primeiros palpites pontuarem."
         />
       )}
+
+      {myRanking ? (
+        <Card style={styles.myCard}>
+          <View style={styles.myCardHeader}>
+            <View>
+              <Text style={styles.myKicker}>Sua campanha</Text>
+              <Text style={styles.myTitle}>{myRanking.user?.name ?? "Voce"}</Text>
+            </View>
+            <View style={styles.myPositionBadge}>
+              <Text style={styles.myPositionText}>#{myPosition}</Text>
+            </View>
+          </View>
+          <View style={styles.myStats}>
+            <View style={styles.myStat}>
+              <Text style={styles.myStatValue}>{myRanking.total_points}</Text>
+              <Text style={styles.myStatLabel}>pontos</Text>
+            </View>
+            <View style={styles.myStat}>
+              <Text style={styles.myStatValue}>{myRanking.exact_scores}</Text>
+              <Text style={styles.myStatLabel}>exatos</Text>
+            </View>
+            <View style={styles.myStat}>
+              <Text style={styles.myStatValue}>{myRanking.correct_results}</Text>
+              <Text style={styles.myStatLabel}>resultados</Text>
+            </View>
+          </View>
+        </Card>
+      ) : null}
 
       <View style={styles.tabs}>
        {[
@@ -270,6 +300,7 @@ const styles = StyleSheet.create({
   },
   tabs: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm
   },
   tab: {
@@ -301,6 +332,64 @@ const styles = StyleSheet.create({
     color: colors.gold,
     fontSize: 11,
     fontWeight: "900"
+  },
+  myCard: {
+    gap: spacing.md
+  },
+  myCardHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  myKicker: {
+    color: colors.gold,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  myTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 2
+  },
+  myPositionBadge: {
+    alignItems: "center",
+    backgroundColor: colors.gold,
+    borderRadius: radius.pill,
+    justifyContent: "center",
+    minWidth: 54,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  myPositionText: {
+    color: colors.black,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  myStats: {
+    flexDirection: "row",
+    gap: spacing.sm
+  },
+  myStat: {
+    backgroundColor: colors.whiteSoft,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexGrow: 1,
+    flexBasis: 142,
+    padding: spacing.sm
+  },
+  myStatValue: {
+    color: colors.gold,
+    fontSize: 20,
+    fontWeight: "900"
+  },
+  myStatLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "800",
+    marginTop: 2
   },
   listHeader: {
     alignItems: "center",

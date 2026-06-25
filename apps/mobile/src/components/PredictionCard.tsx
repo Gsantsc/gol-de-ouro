@@ -160,6 +160,8 @@ export const PredictionCard = ({
   const officialScore = getOfficialScoreLabel(match);
   const userPredictionScore = getUserPredictionScoreLabel(prediction);
   const pointsLabel = getPointsLabel(prediction, match);
+  const scoreContext =
+    match?.status === "encerrado" ? "Placar final" : match?.status === "ao_vivo" ? "Ao vivo" : "Placar oficial";
 
   return (
     <View style={styles.predictionCard}>
@@ -178,6 +180,7 @@ export const PredictionCard = ({
           />
           {!compact ? (
             <View style={styles.scoreCenter}>
+              <Text style={styles.scoreContext}>{scoreContext}</Text>
               <Text style={[styles.scoreText, compact && styles.scoreTextCompact]}>{officialScore}</Text>
             </View>
           ) : null}
@@ -197,88 +200,101 @@ export const PredictionCard = ({
 
       {compact ? (
         <View style={styles.scoreCenterCompact}>
+          <Text style={styles.scoreContext}>{scoreContext}</Text>
           <Text style={[styles.scoreText, compact && styles.scoreTextCompact]}>{officialScore}</Text>
         </View>
       ) : null}
 
       <View style={[styles.predictionSummary, compact && styles.predictionSummaryCompact]}>
-        <Text style={styles.predictionSummaryLabel}>
-          Seu palpite: {userPredictionScore}
-        </Text>
-        <Text
-  style={[
-    styles.pointsText,
-    compact && styles.pointsTextCompact,
-    prediction.points && prediction.points > 0 ? styles.pointsPositive : styles.pointsNeutral
-  ]}
->
-          {pointsLabel}
-        </Text>
+        <View style={styles.predictionScoreBox}>
+          <Text style={styles.predictionSummaryLabel}>Seu palpite</Text>
+          <Text style={styles.predictionScoreText}>{userPredictionScore}</Text>
+        </View>
+        <View
+          style={[
+            styles.pointsBadge,
+            prediction.points && prediction.points > 0 ? styles.pointsBadgePositive : styles.pointsBadgeNeutral
+          ]}
+        >
+          <Text
+            style={[
+              styles.pointsText,
+              compact && styles.pointsTextCompact,
+              prediction.points && prediction.points > 0 ? styles.pointsPositive : styles.pointsNeutral
+            ]}
+          >
+            {pointsLabel}
+          </Text>
+        </View>
       </View>
 
       <View style={[styles.detailsGrid, compact ? styles.detailsGridCompact : styles.detailsGridWide]}>
-  <PredictionDetail
-    basis={detailBasis}
-    compact={compact}
-    label="Vencedor"
-    value={winnerLabel(prediction.predicted_winner, match)}
-  />
+        <PredictionDetail
+          basis={detailBasis}
+          compact={compact}
+          label="Vencedor"
+          value={winnerLabel(prediction.predicted_winner, match)}
+        />
 
-  <PredictionDetail
-    basis={detailBasis}
-    compact={compact}
-    label="Primeiro gol"
-    value={
-      prediction.predicted_first_goal_no_goals
-        ? "Sem gols"
-        : resolvePredictionPlayerLabel({
-            playerId: prediction.predicted_first_scorer_id,
-            fallbackName: prediction.predicted_first_scorer,
-            match,
-            playerById
-          })
-    }
-  />
+        <PredictionDetail
+          basis={detailBasis}
+          compact={compact}
+          label="Primeiro gol"
+          value={
+            prediction.predicted_first_goal_no_goals
+              ? "Sem gols"
+              : resolvePredictionPlayerLabel({
+                  playerId: prediction.predicted_first_scorer_id,
+                  fallbackName: prediction.predicted_first_scorer,
+                  match,
+                  playerById
+                })
+          }
+        />
 
-  <PredictionDetail
-    basis={detailBasis}
-    compact={compact}
-    label="Ambos"
-    value={boolLabel(prediction.predicted_both_teams_score)}
-  />
+        <PredictionDetail
+          basis={detailBasis}
+          compact={compact}
+          label="Ambos marcam"
+          value={boolLabel(prediction.predicted_both_teams_score)}
+        />
 
-  <PredictionDetail
-    basis={detailBasis}
-    compact={compact}
-    label="MVP"
-    value={
-      resolvePredictionPlayerLabel({
-        playerId: prediction.predicted_man_of_match_id,
-        fallbackName: prediction.predicted_man_of_match,
-        match,
-        playerById
-      })
-    }
-  />
+        <PredictionDetail
+          basis={detailBasis}
+          compact={compact}
+          label="MVP"
+          value={
+            resolvePredictionPlayerLabel({
+              playerId: prediction.predicted_man_of_match_id,
+              fallbackName: prediction.predicted_man_of_match,
+              match,
+              playerById
+            })
+          }
+        />
 
-  <PredictionDetail
-    basis={detailBasis}
-    compact={compact}
-    label="Vermelho"
-    value={boolLabel(prediction.predicted_red_card)}
-  />
-</View>
+        <PredictionDetail
+          basis={detailBasis}
+          compact={compact}
+          label="Vermelho"
+          value={boolLabel(prediction.predicted_red_card)}
+        />
+      </View>
     </View>
   );
 };
 const styles = StyleSheet.create({
   predictionCard: {
-    backgroundColor: "rgba(11, 15, 25, 0.42)",
-    borderColor: colors.border,
-    borderRadius: radius.md,
+    backgroundColor: colors.surfaceGlass,
+    borderColor: colors.borderGold,
+    borderRadius: radius.lg,
     borderWidth: 1,
     gap: spacing.sm,
-    padding: spacing.sm
+    padding: spacing.md,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18
   },
   predictionHeader: {
     alignItems: "center",
@@ -341,7 +357,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.goldWash,
     borderColor: colors.borderGold,
-    borderRadius: radius.sm,
+    borderRadius: radius.lg,
     borderWidth: 1,
     justifyContent: "center",
     minWidth: 96,
@@ -353,7 +369,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     backgroundColor: colors.goldWash,
     borderColor: colors.borderGold,
-    borderRadius: radius.sm,
+    borderRadius: radius.lg,
     borderWidth: 1,
     minWidth: 112,
     paddingHorizontal: spacing.md,
@@ -363,7 +379,14 @@ const styles = StyleSheet.create({
     color: colors.gold,
     fontSize: 24,
     fontWeight: "900",
-    letterSpacing: 0.5
+    letterSpacing: 0
+  },
+  scoreContext: {
+    color: colors.muted,
+    fontSize: 9,
+    fontWeight: "900",
+    marginBottom: 2,
+    textTransform: "uppercase"
   },
   scoreTextCompact: {
     fontSize: 22
@@ -402,10 +425,36 @@ const styles = StyleSheet.create({
     gap: spacing.xs
   },
   predictionSummaryLabel: {
-    color: colors.mutedStrong,
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  predictionScoreBox: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: "800"
+    gap: 2,
+    minWidth: 150
+  },
+  predictionScoreText: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: "900"
+  },
+  pointsBadge: {
+    alignItems: "center",
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    justifyContent: "center",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  pointsBadgePositive: {
+    backgroundColor: colors.greenSoft,
+    borderColor: colors.greenBorder
+  },
+  pointsBadgeNeutral: {
+    backgroundColor: colors.whiteSoft,
+    borderColor: colors.border
   },
   pointsText: {
     fontSize: 15,
@@ -450,7 +499,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 10,
     fontWeight: "900",
-    letterSpacing: 0.4,
+    letterSpacing: 0,
     textTransform: "uppercase"
   },
   detailValue: {

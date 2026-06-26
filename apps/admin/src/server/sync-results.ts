@@ -78,6 +78,10 @@ type RankingRow = {
   exact_scores: number;
 };
 
+type CompetitionRankingRow = RankingRow & {
+  championship: string;
+};
+
 type StandingDraft = {
   drawn: number;
   form: string[];
@@ -212,7 +216,7 @@ const dedupeByKey = <T,>(
 };
 
 const logDedupedPayload = (
-  label: "standings" | "rankings",
+  label: "competition_rankings" | "standings" | "rankings",
   before: number,
   after: number,
 ) => {
@@ -305,7 +309,7 @@ const predictionPointsFor = (match: MatchRow, prediction: PredictionRow) => {
   return calculatePredictionPoints(
     {
       awayScore,
-      firstGoalNoGoals: isNoGoalMatch ? true : match.first_goal_no_goals,
+      firstGoalNoGoals: isNoGoalMatch ? true : false,
       firstScorer: isNoGoalMatch ? null : match.first_goal_scorer,
       firstScorerId: isNoGoalMatch ? null : match.first_goal_scorer_id,
       homeScore,
@@ -327,6 +331,22 @@ const predictionPointsFor = (match: MatchRow, prediction: PredictionRow) => {
     },
   );
 };
+
+const outcomeForScore = (homeScore: number, awayScore: number): PredictionWinner => {
+  if (homeScore > awayScore) return "home";
+  if (awayScore > homeScore) return "away";
+  return "draw";
+};
+
+const predictionOutcomeFor = (prediction: PredictionRow): PredictionWinner => {
+  if (prediction.predicted_winner) return prediction.predicted_winner;
+
+  return outcomeForScore(
+    Number(prediction.predicted_home_score ?? 0),
+    Number(prediction.predicted_away_score ?? 0),
+  );
+};
+
 const hasUnscoredPrediction = (match: MatchRow, predictionsByMatch: Map<string, PredictionRow[]>) => {
   if (!isMatchFinishedForScoring(match)) return false;
   return (predictionsByMatch.get(match.id) ?? []).some(
@@ -540,17 +560,29 @@ const refreshRankings = async (
   matches: MatchRow[],
   dryRun: boolean,
 ) => {
-  const [{ data: usersData, error: usersError }, { data: rankingsData, error: rankingsError }] = await Promise.all([
+  const [
+    { data: usersData, error: usersError },
+    { data: rankingsData, error: rankingsError },
+    { data: competitionRankingsData, error: competitionRankingsError },
+  ] = await Promise.all([
     supabase.from("users").select("id,status,approval_status,blocked,deleted_at").is("deleted_at", null),
     supabase.from("rankings").select("user_id,total_points,correct_results,exact_scores"),
+    supabase
+      .from("competition_rankings")
+      .select("championship,user_id,total_points,correct_results,exact_scores"),
   ]);
   if (usersError) throw usersError;
   if (rankingsError) throw rankingsError;
+  if (competitionRankingsError) throw competitionRankingsError;
 
   const users = (usersData ?? []) as UserRow[];
   const rankings = (rankingsData ?? []) as RankingRow[];
+  const competitionRankings = (competitionRankingsData ?? []) as CompetitionRankingRow[];
   const matchById = new Map(matches.map((match) => [match.id, match]));
   const rankingByUser = new Map(rankings.map((ranking) => [ranking.user_id, ranking]));
+  const competitionRankingByKey = new Map(
+    competitionRankings.map((ranking) => [`${ranking.championship}:${ranking.user_id}`, ranking]),
+  );
   const predictionsByUser = new Map<string, PredictionRow[]>();
 
   for (const prediction of predictions) {
@@ -559,13 +591,23 @@ const refreshRankings = async (
   }
 
   const changed = [];
+  const competitionChanged: Array<CompetitionRankingRow & { updated_at: string }> = [];
   for (const user of users) {
     const status = user.status ?? (user.blocked ? "suspended" : user.approval_status);
     if (status !== "approved" || user.blocked) continue;
 
     const userPredictions = predictionsByUser.get(user.id) ?? [];
     const totalPoints = userPredictions.reduce((sum, prediction) => sum + Number(prediction.points ?? 0), 0);
-    const correctResults = userPredictions.filter((prediction) => Number(prediction.points ?? 0) > 0).length;
+    const correctResults = userPredictions.filter((prediction) => {
+      const match = matchById.get(prediction.match_id);
+      if (!match || match.status !== "encerrado") return false;
+
+      const officialOutcome = outcomeForScore(
+        Number(match.home_score ?? 0),
+        Number(match.away_score ?? 0),
+      );
+      return predictionOutcomeFor(prediction) === officialOutcome;
+    }).length;
     const exactScores = userPredictions.filter((prediction) => {
       const match = matchById.get(prediction.match_id);
       return Boolean(
@@ -575,6 +617,56 @@ const refreshRankings = async (
         && Number(prediction.predicted_away_score) === Number(match.away_score),
       );
     }).length;
+    const competitionStats = new Map<string, CompetitionRankingRow & { updated_at: string }>();
+
+    for (const prediction of userPredictions) {
+      const match = matchById.get(prediction.match_id);
+      if (!match || !match.championship || !isMatchFinishedForScoring(match)) continue;
+
+      const key = `${match.championship}:${prediction.user_id}`;
+      const currentCompetitionRanking =
+        competitionStats.get(key) ?? {
+          championship: match.championship,
+          correct_results: 0,
+          exact_scores: 0,
+          total_points: 0,
+          updated_at: new Date().toISOString(),
+          user_id: prediction.user_id,
+        };
+      const officialOutcome = outcomeForScore(
+        Number(match.home_score ?? 0),
+        Number(match.away_score ?? 0),
+      );
+
+      currentCompetitionRanking.total_points += Number(prediction.points ?? 0);
+      if (predictionOutcomeFor(prediction) === officialOutcome) {
+        currentCompetitionRanking.correct_results += 1;
+      }
+      if (
+        Number(prediction.predicted_home_score) === Number(match.home_score)
+        && Number(prediction.predicted_away_score) === Number(match.away_score)
+      ) {
+        currentCompetitionRanking.exact_scores += 1;
+      }
+
+      competitionStats.set(key, currentCompetitionRanking);
+    }
+
+    for (const [key, competitionRanking] of competitionStats) {
+      const currentCompetitionRanking = competitionRankingByKey.get(key);
+
+      if (
+        currentCompetitionRanking
+        && Number(currentCompetitionRanking.total_points ?? 0) === competitionRanking.total_points
+        && Number(currentCompetitionRanking.correct_results ?? 0) === competitionRanking.correct_results
+        && Number(currentCompetitionRanking.exact_scores ?? 0) === competitionRanking.exact_scores
+      ) {
+        continue;
+      }
+
+      competitionChanged.push(competitionRanking);
+    }
+
     const current = rankingByUser.get(user.id);
 
     if (
@@ -602,6 +694,19 @@ const refreshRankings = async (
     const { error } = await supabase
       .from("rankings")
       .upsert(rankingPayload, { onConflict: "user_id" });
+    if (error) throw error;
+  }
+
+  if (competitionChanged.length && !dryRun) {
+    const competitionRankingPayload = dedupeByKey(
+      competitionChanged,
+      (row) => `${row.championship}:${row.user_id}`,
+    );
+    logDedupedPayload("competition_rankings", competitionChanged.length, competitionRankingPayload.length);
+
+    const { error } = await supabase
+      .from("competition_rankings")
+      .upsert(competitionRankingPayload, { onConflict: "championship,user_id" });
     if (error) throw error;
   }
 

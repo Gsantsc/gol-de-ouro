@@ -159,6 +159,50 @@ type MatchDraft = {
   red_card_happened: boolean;
 };
 type MatchDensity = "comfortable" | "compact";
+type OfficialRosterPlayer = {
+  active: boolean;
+  id: string;
+  name: string;
+  position?: string | null;
+  roster?: {
+    championship?: string | null;
+    is_official: boolean;
+    source?: string | null;
+  };
+  team_code?: string | null;
+  team_name?: string | null;
+};
+type MatchPlayersTeam = {
+  code?: string | null;
+  name: string;
+  players: OfficialRosterPlayer[];
+};
+type MatchPlayersResponse = {
+  awayTeam: MatchPlayersTeam;
+  homeTeam: MatchPlayersTeam;
+  match: {
+    away_team: string;
+    away_team_code?: string | null;
+    championship?: string | null;
+    home_team: string;
+    home_team_code?: string | null;
+    id: string;
+    status?: string | null;
+  };
+  ok: boolean;
+  rosterFilter: {
+    championship?: string | null;
+    usesOfficialRosterFilter: boolean;
+    warning?: string;
+  };
+};
+type OfficialExtrasForm = {
+  firstGoalSelection: string;
+  manOfMatchId: string;
+  redCard: string;
+  redCardsAway: string;
+  redCardsHome: string;
+};
 type ToastMessage = { kind: "success" | "error"; message: string };
 type AdminActionOptions = {
   loadingKey?: string;
@@ -171,6 +215,34 @@ const adminStatusClass: Record<MatchStatus, string> = {
   fechado: "border-gold-dark/50 bg-gold/10 text-gold",
   ao_vivo: "border-accent/50 bg-accent/10 text-accent",
   encerrado: "border-pitch-600 bg-pitch-900/70 text-white/55"
+};
+
+const OFFICIAL_EXTRAS_EMPTY_VALUE = "__empty__";
+const OFFICIAL_EXTRAS_NO_GOALS_VALUE = "__no_goals__";
+const OFFICIAL_EXTRAS_SAVED_MESSAGE =
+  "Extras oficiais salvos. Rode Recalcular pontuação desde o início para atualizar os pontos.";
+
+const fetchAdminJson = async <Result,>(path: string, init: RequestInit = {}) => {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+
+  const token = data.session?.access_token;
+  if (!token) throw new Error("Sessão admin expirada.");
+
+  const response = await fetch(path, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({})) as { error?: unknown };
+
+  if (!response.ok) {
+    throw new Error(typeof payload.error === "string" ? payload.error : "Erro ao comunicar com o servidor.");
+  }
+
+  return payload as Result;
 };
 
 const userStatusClass: Record<string, string> = {
@@ -426,6 +498,7 @@ export default function AdminPage() {
           busy={busy}
           matches={data.matches}
           onAction={runAction}
+          onRefresh={refresh}
           players={data.players}
           providerRuns={data.providerRuns}
           settings={data.settings}
@@ -895,6 +968,7 @@ const MatchesPanel = ({
   busy,
   matches,
   onAction,
+  onRefresh,
   players,
   providerRuns,
   settings,
@@ -904,6 +978,7 @@ const MatchesPanel = ({
   busy: boolean;
   matches: Match[];
   onAction: AdminActionRunner;
+  onRefresh: () => Promise<void>;
   players: Player[];
   providerRuns: MatchProviderRun[];
   settings: AppSettings;
@@ -924,6 +999,7 @@ const MatchesPanel = ({
   const [lastRecalculateSummary, setLastRecalculateSummary] = useState<RecalculatePredictionsSummary | null>(null);
   const [lastStatusUpdateSummary, setLastStatusUpdateSummary] = useState<{ checkedCount?: number; updatedCount?: number; byStatus?: Record<string, number> } | null>(null);
   const [matchQuery, setMatchQuery] = useState("");
+  const [officialExtrasMatch, setOfficialExtrasMatch] = useState<Match | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | MatchStatus>("all");
   const [page, setPage] = useState(1);
   const pageSize = density === "compact" ? 12 : 8;
@@ -1472,6 +1548,7 @@ const MatchesPanel = ({
                       onDraftChange={(nextDraft) =>
                         setDrafts((current) => ({ ...current, [match.id]: nextDraft }))
                       }
+                      onEditOfficialExtras={() => setOfficialExtrasMatch(match)}
                       players={players}
                       predictionLockMinutes={predictionLockMinutes}
                     />
@@ -1499,6 +1576,13 @@ const MatchesPanel = ({
             </button>
           </div>
         </div>
+        {officialExtrasMatch && (
+          <OfficialExtrasModal
+            match={officialExtrasMatch}
+            onClose={() => setOfficialExtrasMatch(null)}
+            onSaved={onRefresh}
+          />
+        )}
       </div>
     </section>
   );
@@ -1512,6 +1596,7 @@ const AdminMatchCard = memo(function AdminMatchCard({
   match,
   onAction,
   onDraftChange,
+  onEditOfficialExtras,
   players,
   predictionLockMinutes
 }: {
@@ -1522,6 +1607,7 @@ const AdminMatchCard = memo(function AdminMatchCard({
   match: Match;
   onAction: AdminActionRunner;
   onDraftChange: (draft: MatchDraft) => void;
+  onEditOfficialExtras: () => void;
   players: Player[];
   predictionLockMinutes: number;
 }) {
@@ -1684,7 +1770,16 @@ const AdminMatchCard = memo(function AdminMatchCard({
           </label>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2 lg:flex lg:items-center">
+        <div className="grid gap-2 sm:grid-cols-3 lg:flex lg:items-center">
+          <button
+            className="btn-ghost min-h-12 w-full px-4 lg:w-auto"
+            disabled={isCardBusy}
+            onClick={onEditOfficialExtras}
+            type="button"
+          >
+            <Settings className="h-4 w-4" />
+            Editar extras oficiais
+          </button>
           <button
             className="btn-ghost min-h-12 w-full px-4 lg:w-auto"
             disabled={isCardBusy || !isDirty}
@@ -1750,6 +1845,332 @@ const AdminMatchCard = memo(function AdminMatchCard({
     </article>
   );
 });
+
+const officialExtrasInitialFormFor = (match: Match): OfficialExtrasForm => ({
+  firstGoalSelection: match.first_goal_no_goals
+    ? OFFICIAL_EXTRAS_NO_GOALS_VALUE
+    : match.first_goal_scorer_id ?? OFFICIAL_EXTRAS_EMPTY_VALUE,
+  manOfMatchId: match.man_of_match_id ?? OFFICIAL_EXTRAS_EMPTY_VALUE,
+  redCard:
+    match.red_card_happened === true
+      ? "true"
+      : match.red_card_happened === false
+        ? "false"
+        : OFFICIAL_EXTRAS_EMPTY_VALUE,
+  redCardsAway: match.red_cards_away === null || match.red_cards_away === undefined ? "" : String(match.red_cards_away),
+  redCardsHome: match.red_cards_home === null || match.red_cards_home === undefined ? "" : String(match.red_cards_home),
+});
+
+const parseOptionalCardCount = (value: string, label: string) => {
+  if (!value.trim()) return null;
+
+  const count = Number(value);
+  if (!Number.isInteger(count) || count < 0) {
+    throw new Error(`${label} inválido.`);
+  }
+
+  return count;
+};
+
+const OfficialExtrasModal = ({
+  match,
+  onClose,
+  onSaved,
+}: {
+  match: Match;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) => {
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<OfficialExtrasForm>(() => officialExtrasInitialFormFor(match));
+  const [loading, setLoading] = useState(true);
+  const [playersResponse, setPlayersResponse] = useState<MatchPlayersResponse | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    setForm(officialExtrasInitialFormFor(match));
+    setSuccess(null);
+  }, [match]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setError(null);
+    setLoading(true);
+    setPlayersResponse(null);
+
+    fetchAdminJson<MatchPlayersResponse>(`/api/admin/matches/${match.id}/players`)
+      .then((payload) => {
+        if (!cancelled) setPlayersResponse(payload);
+      })
+      .catch((nextError) => {
+        if (!cancelled) setError(readError(nextError));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [match.id]);
+
+  const officialPlayerGroups = useMemo(() => {
+    if (!playersResponse) return [] as Array<{ label: string; players: OfficialRosterPlayer[] }>;
+
+    return [
+      { label: playersResponse.homeTeam.name, players: playersResponse.homeTeam.players },
+      { label: playersResponse.awayTeam.name, players: playersResponse.awayTeam.players },
+    ];
+  }, [playersResponse]);
+  const officialPlayerIds = useMemo(
+    () => new Set(officialPlayerGroups.flatMap((group) => group.players.map((player) => player.id))),
+    [officialPlayerGroups],
+  );
+  const hasOfficialPlayers = officialPlayerIds.size > 0;
+  const rosterWarning = playersResponse?.rosterFilter.warning;
+  const blockPlayerOptions = Boolean(rosterWarning) || !hasOfficialPlayers;
+  const championshipLabel =
+    match.championship && match.championship in CHAMPIONSHIP_LABELS
+      ? CHAMPIONSHIP_LABELS[match.championship as keyof typeof CHAMPIONSHIP_LABELS]
+      : match.championship || "Copa do Mundo 2026";
+  const statusLabel = MATCH_STATUS_LABELS[match.status] ?? match.status;
+
+  useEffect(() => {
+    if (!playersResponse) return;
+
+    setForm((current) => {
+      const nextFirstGoal =
+        current.firstGoalSelection !== OFFICIAL_EXTRAS_EMPTY_VALUE
+        && current.firstGoalSelection !== OFFICIAL_EXTRAS_NO_GOALS_VALUE
+        && !officialPlayerIds.has(current.firstGoalSelection)
+          ? OFFICIAL_EXTRAS_EMPTY_VALUE
+          : current.firstGoalSelection;
+      const nextManOfMatch =
+        current.manOfMatchId !== OFFICIAL_EXTRAS_EMPTY_VALUE && !officialPlayerIds.has(current.manOfMatchId)
+          ? OFFICIAL_EXTRAS_EMPTY_VALUE
+          : current.manOfMatchId;
+
+      if (nextFirstGoal === current.firstGoalSelection && nextManOfMatch === current.manOfMatchId) {
+        return current;
+      }
+
+      return {
+        ...current,
+        firstGoalSelection: nextFirstGoal,
+        manOfMatchId: nextManOfMatch,
+      };
+    });
+  }, [officialPlayerIds, playersResponse]);
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const firstGoalPlayerId =
+        form.firstGoalSelection === OFFICIAL_EXTRAS_EMPTY_VALUE
+        || form.firstGoalSelection === OFFICIAL_EXTRAS_NO_GOALS_VALUE
+          ? null
+          : form.firstGoalSelection;
+      const manOfMatchId = form.manOfMatchId === OFFICIAL_EXTRAS_EMPTY_VALUE ? null : form.manOfMatchId;
+
+      if (firstGoalPlayerId && !officialPlayerIds.has(firstGoalPlayerId)) {
+        throw new Error("Selecione um primeiro marcador do elenco oficial.");
+      }
+
+      if (manOfMatchId && !officialPlayerIds.has(manOfMatchId)) {
+        throw new Error("Selecione um craque do jogo do elenco oficial.");
+      }
+
+      const payload = {
+        first_goal_no_goals: form.firstGoalSelection === OFFICIAL_EXTRAS_NO_GOALS_VALUE,
+        first_goal_scorer_id: firstGoalPlayerId,
+        man_of_match_id: manOfMatchId,
+        red_card_happened:
+          form.redCard === OFFICIAL_EXTRAS_EMPTY_VALUE
+            ? null
+            : form.redCard === "true",
+        red_cards_away: parseOptionalCardCount(form.redCardsAway, "Cartões do visitante"),
+        red_cards_home: parseOptionalCardCount(form.redCardsHome, "Cartões da casa"),
+      };
+
+      setSaving(true);
+      await fetchAdminJson<{ ok: boolean; match: Partial<Match> }>(`/api/admin/matches/${match.id}/official-extras`, {
+        body: JSON.stringify(payload),
+        method: "POST",
+      });
+      setSuccess(OFFICIAL_EXTRAS_SAVED_MESSAGE);
+      await onSaved().catch((refreshError) => debugLog("[ADMIN] refresh after official extras skipped", refreshError));
+    } catch (nextError) {
+      setError(readError(nextError));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 py-6 backdrop-blur-sm">
+      <form
+        aria-modal="true"
+        className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-pitch-600 bg-pitch-800 p-5 shadow-panel"
+        onSubmit={save}
+        role="dialog"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-normal text-gold">Extras oficiais</p>
+            <h3 className="mt-1 text-xl font-black text-white">
+              {match.home_team} {match.home_score} x {match.away_score} {match.away_team}
+            </h3>
+            <p className="mt-1 text-sm text-white/55">
+              {championshipLabel} - {statusLabel} - {formatFullDatePtBr(match.start_time)}
+            </p>
+          </div>
+          <button
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white/55 hover:bg-white/10 hover:text-white"
+            disabled={saving}
+            onClick={onClose}
+            type="button"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {loading && (
+          <div className="mt-4 flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] p-3 text-sm font-bold text-white/65">
+            <Loader2 className="h-4 w-4 animate-spin text-gold" />
+            Carregando elenco oficial...
+          </div>
+        )}
+
+        {rosterWarning && (
+          <div className="mt-4 rounded-md border border-gold/35 bg-gold/10 p-3 text-sm font-bold leading-6 text-gold">
+            {rosterWarning}
+          </div>
+        )}
+
+        {!loading && !rosterWarning && !hasOfficialPlayers && (
+          <div className="mt-4 rounded-md border border-gold/35 bg-gold/10 p-3 text-sm font-bold leading-6 text-gold">
+            Nenhum jogador oficial encontrado para os times desta partida. Cadastre o elenco oficial desta competição antes de preencher jogador.
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-4 rounded-md border border-red-400/35 bg-red-500/10 p-3 text-sm font-bold leading-6 text-red-100">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="mt-4 rounded-md border border-grass/35 bg-grass/10 p-3 text-sm font-bold leading-6 text-grass">
+            {success}
+          </div>
+        )}
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-black uppercase text-white/45">Primeiro marcador</span>
+            <select
+              className="input w-full"
+              disabled={loading || saving}
+              onChange={(event) => setForm((current) => ({ ...current, firstGoalSelection: event.target.value }))}
+              value={form.firstGoalSelection}
+            >
+              <option value={OFFICIAL_EXTRAS_EMPTY_VALUE}>Não informado</option>
+              <option value={OFFICIAL_EXTRAS_NO_GOALS_VALUE}>Sem gols</option>
+              {!blockPlayerOptions && officialPlayerGroups.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.players.map((player) => (
+                    <option key={player.id} value={player.id}>
+                      {player.name}{player.position ? ` - ${player.position}` : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-black uppercase text-white/45">Craque do jogo</span>
+            <select
+              className="input w-full"
+              disabled={loading || saving || blockPlayerOptions}
+              onChange={(event) => setForm((current) => ({ ...current, manOfMatchId: event.target.value }))}
+              value={form.manOfMatchId}
+            >
+              <option value={OFFICIAL_EXTRAS_EMPTY_VALUE}>Não informado</option>
+              {!blockPlayerOptions && officialPlayerGroups.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.players.map((player) => (
+                    <option key={player.id} value={player.id}>
+                      {player.name}{player.position ? ` - ${player.position}` : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-black uppercase text-white/45">Cartão vermelho</span>
+            <select
+              className="input w-full"
+              disabled={loading || saving}
+              onChange={(event) => setForm((current) => ({ ...current, redCard: event.target.value }))}
+              value={form.redCard}
+            >
+              <option value={OFFICIAL_EXTRAS_EMPTY_VALUE}>Não informado</option>
+              <option value="true">Sim</option>
+              <option value="false">Não</option>
+            </select>
+          </label>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-black uppercase text-white/45">Vermelhos casa</span>
+              <input
+                className="input w-full"
+                disabled={loading || saving}
+                inputMode="numeric"
+                min={0}
+                onChange={(event) => setForm((current) => ({ ...current, redCardsHome: event.target.value }))}
+                step={1}
+                type="number"
+                value={form.redCardsHome}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-black uppercase text-white/45">Vermelhos visitante</span>
+              <input
+                className="input w-full"
+                disabled={loading || saving}
+                inputMode="numeric"
+                min={0}
+                onChange={(event) => setForm((current) => ({ ...current, redCardsAway: event.target.value }))}
+                step={1}
+                type="number"
+                value={form.redCardsAway}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-2 sm:grid-cols-2">
+          <button className="btn-ghost w-full" disabled={saving} onClick={onClose} type="button">
+            Cancelar
+          </button>
+          <button className="btn-primary w-full" disabled={loading || saving} type="submit">
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            {saving ? "Salvando..." : "Salvar extras oficiais"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
 
 const AdminTeamSide = ({
   alignRight = false,

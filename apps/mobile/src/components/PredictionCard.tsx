@@ -48,6 +48,165 @@ const boolLabel = (value?: boolean | null) => {
   if (value === false) return "Nao";
   return "-";
 };
+
+type DetailPointState = "missing" | "neutral" | "pending" | "positive";
+
+type DetailPoints = {
+  label: string;
+  state: DetailPointState;
+};
+
+type PredictionPointsBreakdown = {
+  bothTeamsScore: DetailPoints;
+  firstScorer: DetailPoints;
+  manOfMatch: DetailPoints;
+  redCard: DetailPoints;
+  score: DetailPoints;
+};
+
+const normalizeMarketText = (value?: string | null) => {
+  const normalized = value?.trim().toLowerCase();
+  return normalized || null;
+};
+
+const scoreNumber = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const outcomeForScore = (homeScore: number, awayScore: number): PredictionWinner => {
+  if (homeScore > awayScore) return "home";
+  if (awayScore > homeScore) return "away";
+  return "draw";
+};
+
+const pointsBadgeFor = (points: number): DetailPoints => ({
+  label: points > 0 ? `+${points} pts` : "0 pts",
+  state: points > 0 ? "positive" : "neutral"
+});
+
+const pendingPoints = (match: Match | null): DetailPoints => ({
+  label: match ? "Aguardando" : "-",
+  state: "pending"
+});
+
+const missingOfficialPoints = (): DetailPoints => ({
+  label: "Sem dado oficial",
+  state: "missing"
+});
+
+const officialRedCardFor = (match: Match) => {
+  const redCardCount = scoreNumber(match.red_cards_home) + scoreNumber(match.red_cards_away);
+  if (redCardCount > 0) return true;
+  if (match.red_card_happened === true || match.red_card_happened === false) return match.red_card_happened;
+  return undefined;
+};
+
+const calculatePredictionBreakdown = ({
+  displayStatus,
+  match,
+  prediction
+}: {
+  displayStatus: PredictionDisplayStatus;
+  match: Match | null;
+  prediction: Prediction;
+}): PredictionPointsBreakdown => {
+  const isScored = displayStatus === "scored_win" || displayStatus === "scored_zero";
+  const pending = pendingPoints(match);
+
+  if (!match || !isScored) {
+    return {
+      bothTeamsScore: pending,
+      firstScorer: pending,
+      manOfMatch: pending,
+      redCard: pending,
+      score: pending
+    };
+  }
+
+  const homeScore = scoreNumber(match.home_score);
+  const awayScore = scoreNumber(match.away_score);
+  const predictedHomeScore = scoreNumber(prediction.predicted_home_score);
+  const predictedAwayScore = scoreNumber(prediction.predicted_away_score);
+  const exactScore = homeScore === predictedHomeScore && awayScore === predictedAwayScore;
+  const officialOutcome = outcomeForScore(homeScore, awayScore);
+  const predictedOutcome = prediction.predicted_winner ?? outcomeForScore(predictedHomeScore, predictedAwayScore);
+  const sameOutcome = officialOutcome === predictedOutcome;
+  const sameGoalDifference = homeScore - awayScore === predictedHomeScore - predictedAwayScore;
+  const scorePoints = exactScore ? 10 : (sameOutcome ? 5 : 0) + (sameGoalDifference ? 3 : 0);
+
+  const isNoGoalMatch = homeScore === 0 && awayScore === 0;
+  const officialFirstScorerName = normalizeMarketText(match.first_goal_scorer);
+  const hasOfficialFirstScorer = Boolean(match.first_goal_scorer_id || officialFirstScorerName);
+  const firstScorerPoints = (() => {
+    if (isNoGoalMatch) return pointsBadgeFor(prediction.predicted_first_goal_no_goals === true ? 8 : 0);
+    if (!hasOfficialFirstScorer) return missingOfficialPoints();
+
+    const hitById = Boolean(
+      match.first_goal_scorer_id
+      && prediction.predicted_first_scorer_id
+      && match.first_goal_scorer_id === prediction.predicted_first_scorer_id
+    );
+    const hitByName = Boolean(
+      !match.first_goal_scorer_id
+      && !prediction.predicted_first_scorer_id
+      && officialFirstScorerName
+      && officialFirstScorerName === normalizeMarketText(prediction.predicted_first_scorer)
+    );
+
+    return pointsBadgeFor(hitById || hitByName ? 8 : 0);
+  })();
+
+  const bothTeamsScore = homeScore > 0 && awayScore > 0;
+  const bothTeamsScorePoints = pointsBadgeFor(
+    prediction.predicted_both_teams_score !== null
+    && prediction.predicted_both_teams_score !== undefined
+    && prediction.predicted_both_teams_score === bothTeamsScore
+      ? 2
+      : 0
+  );
+
+  const officialManOfMatchName = normalizeMarketText(match.man_of_match);
+  const hasOfficialManOfMatch = Boolean(match.man_of_match_id || officialManOfMatchName);
+  const manOfMatchPoints = (() => {
+    if (!hasOfficialManOfMatch) return missingOfficialPoints();
+
+    const hitById = Boolean(
+      match.man_of_match_id
+      && prediction.predicted_man_of_match_id
+      && match.man_of_match_id === prediction.predicted_man_of_match_id
+    );
+    const hitByName = Boolean(
+      !match.man_of_match_id
+      && !prediction.predicted_man_of_match_id
+      && officialManOfMatchName
+      && officialManOfMatchName === normalizeMarketText(prediction.predicted_man_of_match)
+    );
+
+    return pointsBadgeFor(hitById || hitByName ? 6 : 0);
+  })();
+
+  const officialRedCard = officialRedCardFor(match);
+  const redCardPoints =
+    officialRedCard === undefined
+      ? missingOfficialPoints()
+      : pointsBadgeFor(
+          prediction.predicted_red_card !== null
+          && prediction.predicted_red_card !== undefined
+          && prediction.predicted_red_card === officialRedCard
+            ? 2
+            : 0
+        );
+
+  return {
+    bothTeamsScore: bothTeamsScorePoints,
+    firstScorer: firstScorerPoints,
+    manOfMatch: manOfMatchPoints,
+    redCard: redCardPoints,
+    score: pointsBadgeFor(scorePoints)
+  };
+};
+
 const resolvePredictionPlayerLabel = ({
   playerId,
   fallbackName,
@@ -76,11 +235,13 @@ const PredictionDetail = ({
   basis,
   compact,
   label,
+  points,
   value
 }: {
   basis: DimensionValue;
   compact: boolean;
   label: string;
+  points: DetailPoints;
   value: string;
 }) => (
   <View style={[styles.detailItem, compact && styles.detailItemCompact, { flexBasis: basis }]}>
@@ -88,6 +249,27 @@ const PredictionDetail = ({
     <Text numberOfLines={compact ? 3 : 2} style={styles.detailValue}>
       {value}
     </Text>
+    <View
+      style={[
+        styles.detailPointsBadge,
+        points.state === "positive" && styles.detailPointsBadgePositive,
+        points.state === "neutral" && styles.detailPointsBadgeNeutral,
+        points.state === "pending" && styles.detailPointsBadgePending,
+        points.state === "missing" && styles.detailPointsBadgeMissing
+      ]}
+    >
+      <Text
+        style={[
+          styles.detailPointsText,
+          points.state === "positive" && styles.detailPointsTextPositive,
+          points.state === "neutral" && styles.detailPointsTextNeutral,
+          points.state === "pending" && styles.detailPointsTextPending,
+          points.state === "missing" && styles.detailPointsTextMissing
+        ]}
+      >
+        {points.label}
+      </Text>
+    </View>
   </View>
 );
 
@@ -162,6 +344,7 @@ export const PredictionCard = ({
   const pointsLabel = getPointsLabel(prediction, match);
   const scoreContext =
     match?.status === "encerrado" ? "Placar final" : match?.status === "ao_vivo" ? "Ao vivo" : "Placar oficial";
+  const breakdown = calculatePredictionBreakdown({ displayStatus, match, prediction });
 
   return (
     <View style={styles.predictionCard}>
@@ -233,6 +416,7 @@ export const PredictionCard = ({
           basis={detailBasis}
           compact={compact}
           label="Vencedor"
+          points={breakdown.score}
           value={winnerLabel(prediction.predicted_winner, match)}
         />
 
@@ -240,6 +424,7 @@ export const PredictionCard = ({
           basis={detailBasis}
           compact={compact}
           label="Primeiro gol"
+          points={breakdown.firstScorer}
           value={
             prediction.predicted_first_goal_no_goals
               ? "Sem gols"
@@ -256,6 +441,7 @@ export const PredictionCard = ({
           basis={detailBasis}
           compact={compact}
           label="Ambos marcam"
+          points={breakdown.bothTeamsScore}
           value={boolLabel(prediction.predicted_both_teams_score)}
         />
 
@@ -263,6 +449,7 @@ export const PredictionCard = ({
           basis={detailBasis}
           compact={compact}
           label="MVP"
+          points={breakdown.manOfMatch}
           value={
             resolvePredictionPlayerLabel({
               playerId: prediction.predicted_man_of_match_id,
@@ -277,6 +464,7 @@ export const PredictionCard = ({
           basis={detailBasis}
           compact={compact}
           label="Vermelho"
+          points={breakdown.redCard}
           value={boolLabel(prediction.predicted_red_card)}
         />
       </View>
@@ -507,5 +695,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     marginTop: 4
+  },
+  detailPointsBadge: {
+    alignSelf: "flex-start",
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 3
+  },
+  detailPointsBadgeMissing: {
+    backgroundColor: colors.amberSoft,
+    borderColor: colors.amberBorder
+  },
+  detailPointsBadgeNeutral: {
+    backgroundColor: colors.whiteSoft,
+    borderColor: colors.border
+  },
+  detailPointsBadgePending: {
+    backgroundColor: colors.whiteSoft,
+    borderColor: colors.border
+  },
+  detailPointsBadgePositive: {
+    backgroundColor: colors.greenSoft,
+    borderColor: colors.greenBorder
+  },
+  detailPointsText: {
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  detailPointsTextMissing: {
+    color: colors.amber
+  },
+  detailPointsTextNeutral: {
+    color: colors.muted
+  },
+  detailPointsTextPending: {
+    color: colors.mutedStrong
+  },
+  detailPointsTextPositive: {
+    color: colors.green
   }
 });

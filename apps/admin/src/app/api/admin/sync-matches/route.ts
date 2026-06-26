@@ -14,11 +14,12 @@ import {
   type ProviderMatchStats,
   type TournamentType
 } from "@gol-de-ouro/shared";
-import { scoreFinishedMatchAndRefreshRanking } from "@/lib/ranking-update-service";
 
 type SyncSummary = {
   insertedCount: number;
   providerName: string;
+  preservedFinishedMatches: number;
+  skippedScorePreservation: number;
   updatedCount: number;
   teamsSynced: number;
   standingsSynced: number;
@@ -26,6 +27,49 @@ type SyncSummary = {
   cacheHits: number;
   cacheMisses: number;
 };
+
+type ExistingMatchRow = {
+  away_score?: number | null;
+  first_goal_no_goals?: boolean | null;
+  first_goal_scorer?: string | null;
+  first_goal_scorer_id?: string | null;
+  home_score?: number | null;
+  id: string;
+  live_score?: unknown;
+  man_of_match?: string | null;
+  man_of_match_id?: string | null;
+  provider_external_id?: string | null;
+  red_card_happened?: boolean | null;
+  red_cards_away?: number | null;
+  red_cards_home?: number | null;
+  stats?: ProviderMatchStats | null;
+  status?: string | null;
+};
+
+type UpsertProviderMatchResult = {
+  action: "inserted" | "updated";
+  matchId: string;
+  preservedFinishedMatch: boolean;
+  skippedScorePreservation: boolean;
+};
+
+const EXISTING_MATCH_SELECT = [
+  "id",
+  "status",
+  "provider_external_id",
+  "stats",
+  "home_score",
+  "away_score",
+  "live_score",
+  "first_goal_scorer_id",
+  "first_goal_scorer",
+  "first_goal_no_goals",
+  "man_of_match_id",
+  "man_of_match",
+  "red_card_happened",
+  "red_cards_home",
+  "red_cards_away",
+].join(",");
 
 const requiredEnv = (name: string) => {
   const value = process.env[name];
@@ -184,7 +228,7 @@ const findExistingProviderMatch = async (
 ) => {
   const exact = await supabase
     .from("matches")
-    .select("id,status,provider_external_id,stats")
+    .select(EXISTING_MATCH_SELECT)
     .eq("provider_name", providerName)
     .eq("provider_external_id", providerMatch.externalId)
     .is("deleted_at", null)
@@ -194,7 +238,11 @@ const findExistingProviderMatch = async (
     logSync(`UPSERT ERROR: Failed to check existing match - ${exact.error.message}`, "error");
     throw exact.error;
   }
-  if (exact.data) return exact.data;
+  const exactMatch = exact.data as unknown as ExistingMatchRow | null;
+
+if (exactMatch) {
+  return exactMatch;
+}
 
   if (providerName !== "static-wc2026" || providerMatch.championship !== "world_cup_2026") {
     return null;
@@ -206,7 +254,7 @@ const findExistingProviderMatch = async (
 
   const candidates = await supabase
     .from("matches")
-    .select("id,status,provider_external_id,stats")
+    .select(EXISTING_MATCH_SELECT)
     .eq("provider_name", providerName)
     .eq("championship", providerMatch.championship)
     .is("deleted_at", null);
@@ -216,7 +264,10 @@ const findExistingProviderMatch = async (
     throw candidates.error;
   }
 
-  return (candidates.data ?? []).find((match) => {
+ const candidateRows = (candidates.data ?? []) as unknown as ExistingMatchRow[];
+
+return candidateRows.find((match) => {
+
     const stats = (match.stats ?? {}) as ProviderMatchStats;
     const existingNumber = readProviderStatNumber(stats, "match_number");
     return existingNumber === matchNumber || legacyIds.includes(String(match.provider_external_id ?? ""));
@@ -317,10 +368,11 @@ const linkTeamsToMatches = async (
     .maybeSingle();
 
   if (homeTeam?.id || awayTeam?.id) {
-    await supabase.from("matches").update({
-      home_team_id: homeTeam?.id || null,
-      away_team_id: awayTeam?.id || null,
-    }).eq("id", matchId);
+    const teamPayload: Record<string, string> = {};
+    if (homeTeam?.id) teamPayload.home_team_id = homeTeam.id as string;
+    if (awayTeam?.id) teamPayload.away_team_id = awayTeam.id as string;
+
+    await supabase.from("matches").update(teamPayload).eq("id", matchId);
   }
 };
 
@@ -418,7 +470,7 @@ const upsertProviderMatch = async (
 
   // FINAL SCORE SYNC
   if (status === "encerrado" && providerMatch.hasFinalScore !== false && existing?.status !== "encerrado") {
-    await scoreFinishedMatchAndRefreshRanking(supabase, matchId);
+
   }
 
   if (providerMatch.events.length) {
@@ -603,6 +655,8 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary & { starte
     standingsSynced: 0, // TODO: Implement standings sync
     lineupsSynced: 0, // TODO: Implement lineups sync
     cacheHits,
+    preservedFinishedMatches: 0,
+    skippedScorePreservation: 0,
     cacheMisses,
     startedAt,
     finishedAt,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { CheckCircle2, Clock, Minus, Plus, Search, Send, UserRound, X } from "lucide-react-native";
 import type { Match, Player, Prediction, PredictionWinner } from "../shared";
@@ -61,13 +61,12 @@ export const PredictionScreen = ({
     })
   );
   const [firstScorerId, setFirstScorerId] = useState<string | null>(prediction?.predicted_first_scorer_id ?? null);
-  const [firstGoalNoGoals, setFirstGoalNoGoals] = useState(Boolean(prediction?.predicted_first_goal_no_goals));
   const [bothTeamsScore, setBothTeamsScore] = useState(prediction?.predicted_both_teams_score ?? false);
   const [manOfMatchId, setManOfMatchId] = useState<string | null>(prediction?.predicted_man_of_match_id ?? null);
-  const [redCard, setRedCard] = useState(prediction?.predicted_red_card ?? false);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const firstScorerDisabled = homeScore === 0 && awayScore === 0;
   const predictionAccess = canSubmitPrediction(match, profile, new Date(), predictionLockMinutes);
   const canSubmit = predictionAccess.allowed;
   const matchPlayers = players.filter((player) => isPlayerEligibleForMatch(player, match));
@@ -77,8 +76,14 @@ export const PredictionScreen = ({
   const manOfMatchPlayer = manOfMatchCandidate && isPlayerEligibleForMatch(manOfMatchCandidate, match) ? manOfMatchCandidate : null;
   const homeTeamName = getTeamDisplayName(match.home_team);
   const awayTeamName = getTeamDisplayName(match.away_team);
-  const firstScorerLabel = firstGoalNoGoals ? "Sem gols" : firstScorerPlayer?.name ?? (firstScorerCandidate && !isPlayerEligibleForMatch(firstScorerCandidate, match) ? "Jogador inválido para esta partida" : "Não selecionado");
+  const firstScorerLabel = firstScorerDisabled ? "Nao se aplica" : firstScorerPlayer?.name ?? (firstScorerCandidate && !isPlayerEligibleForMatch(firstScorerCandidate, match) ? "Jogador inválido para esta partida" : "Não selecionado");
   const manOfMatchLabel = manOfMatchPlayer?.name ?? (manOfMatchCandidate && !isPlayerEligibleForMatch(manOfMatchCandidate, match) ? "Jogador inválido para esta partida" : "Não selecionado");
+
+  useEffect(() => {
+    if (firstScorerDisabled && firstScorerId) {
+      setFirstScorerId(null);
+    }
+  }, [firstScorerDisabled, firstScorerId]);
 
   const validateBeforeSubmit = () => {
     if (!profile) return "Sessão expirada. Entre novamente.";
@@ -87,7 +92,7 @@ export const PredictionScreen = ({
       return "Preencha o placar para enviar seu palpite.";
     }
     if (!winner) return "Selecione o vencedor para continuar.";
-    if (firstScorerId && !firstScorerPlayer) {
+    if (!firstScorerDisabled && firstScorerId && !firstScorerPlayer) {
       return "Selecione apenas jogadores das seleções desta partida.";
     }
     if (manOfMatchId && !manOfMatchPlayer) {
@@ -118,12 +123,12 @@ export const PredictionScreen = ({
         awayScore: normalizedAwayScore,
         winner,
         firstScorer: null,
-        firstScorerId,
-        firstGoalNoGoals,
+        firstScorerId: firstScorerDisabled ? null : firstScorerId,
+        firstGoalNoGoals: false,
         bothTeamsScore,
         manOfMatch: null,
         manOfMatchId,
-        redCard
+        redCard: false
       });
       setSubmitted(true);
       await onSubmitted();
@@ -203,18 +208,22 @@ export const PredictionScreen = ({
             </View>
 
             <View style={styles.fieldGrid}>
-              <PlayerPicker
-                label="Primeiro jogador a marcar"
-                match={match}
-                noGoals={firstGoalNoGoals}
-                onChange={({ noGoals, player }) => {
-                  setFirstGoalNoGoals(Boolean(noGoals));
-                  setFirstScorerId(player?.id ?? null);
-                }}
-                players={matchPlayers}
-                selectedPlayerId={firstScorerPlayer?.id ?? null}
-                showNoGoals
-              />
+              {firstScorerDisabled ? (
+                <View style={styles.field}>
+                  <Text style={styles.fieldLabel}>Primeiro jogador a marcar</Text>
+                  <View style={styles.disabledMarketBox}>
+                    <Text style={styles.disabledMarketText}>Nao se aplica para palpite 0 x 0</Text>
+                  </View>
+                </View>
+              ) : (
+                <PlayerPicker
+                  label="Primeiro jogador a marcar"
+                  match={match}
+                  onChange={({ player }) => setFirstScorerId(player?.id ?? null)}
+                  players={matchPlayers}
+                  selectedPlayerId={firstScorerPlayer?.id ?? null}
+                />
+              )}
               <PlayerPicker
                 label="Homem do jogo"
                 match={match}
@@ -226,7 +235,6 @@ export const PredictionScreen = ({
 
             <View style={styles.fieldGrid}>
               <ToggleChoice label="Ambos marcam" onChange={setBothTeamsScore} value={bothTeamsScore} />
-              <ToggleChoice label="Cartão vermelho" onChange={setRedCard} value={redCard} />
             </View>
 
             <View style={styles.summaryBox}>
@@ -237,7 +245,6 @@ export const PredictionScreen = ({
                 <SummaryItem label="Primeiro jogador" value={firstScorerLabel} />
                 <SummaryItem label="Homem do jogo" value={manOfMatchLabel} />
                 <SummaryItem label="Ambos marcam" value={boolLabel(bothTeamsScore)} />
-                <SummaryItem label="Cartão vermelho" value={boolLabel(redCard)} />
               </View>
             </View>
 
@@ -298,19 +305,15 @@ const ChoiceButton = ({ active, label, onPress }: { active: boolean; label: stri
 const PlayerPicker = ({
   label,
   match,
-  noGoals = false,
   onChange,
   players,
-  selectedPlayerId,
-  showNoGoals = false
+  selectedPlayerId
 }: {
   label: string;
   match: Match;
-  noGoals?: boolean;
-  onChange: (value: { noGoals?: boolean; player: Player | null }) => void;
+  onChange: (value: { player: Player | null }) => void;
   players: Player[];
   selectedPlayerId?: string | null;
-  showNoGoals?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -324,13 +327,13 @@ const PlayerPicker = ({
     { name: match.home_team, players: filtered(match.home_team) },
     { name: match.away_team, players: filtered(match.away_team) }
   ];
-  const display = noGoals ? "Sem gols" : selectedPlayer?.name ?? "Selecionar jogador";
+  const display = selectedPlayer?.name ?? "Selecionar jogador";
 
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <Pressable accessibilityRole="button" onPress={() => setOpen(true)} style={styles.pickerButton}>
-        <Text numberOfLines={1} style={[styles.pickerText, (selectedPlayer || noGoals) && styles.pickerTextActive]}>
+        <Text numberOfLines={1} style={[styles.pickerText, selectedPlayer && styles.pickerTextActive]}>
           {display}
         </Text>
         <UserRound color={colors.gold} size={17} />
@@ -358,32 +361,19 @@ const PlayerPicker = ({
               />
             </View>
             <ScrollView style={styles.playerList}>
-              {showNoGoals ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    onChange({ noGoals: true, player: null });
-                    setOpen(false);
-                  }}
-                  style={[styles.playerRow, noGoals && styles.playerRowActive]}
-                >
-                  <Text style={[styles.playerName, noGoals && styles.playerNameActive]}>Sem gols</Text>
-                  <Text style={[styles.playerMeta, noGoals && styles.playerNameActive]}>0 x 0</Text>
-                </Pressable>
-              ) : null}
               {groups.map((group) => (
                 <View key={group.name} style={styles.playerGroup}>
                   <Text style={styles.playerGroupTitle}>{getTeamDisplayName(group.name)}</Text>
                   {isPlaceholderTeam(group.name) ? (
                     <Text style={styles.emptyPlayers}>Jogadores disponiveis apos definicao da equipe.</Text>
                   ) : group.players.length ? group.players.map((player) => {
-                    const active = player.id === selectedPlayerId && !noGoals;
+                    const active = player.id === selectedPlayerId;
                     return (
                       <Pressable
                         accessibilityRole="button"
                         key={player.id}
                         onPress={() => {
-                          onChange({ noGoals: false, player });
+                          onChange({ player });
                           setOpen(false);
                         }}
                         style={[styles.playerRow, active && styles.playerRowActive]}
@@ -618,6 +608,22 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 12,
     fontWeight: "900"
+  },
+  disabledMarketBox: {
+    alignItems: "center",
+    backgroundColor: "rgba(11, 15, 25, 0.52)",
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 46,
+    paddingHorizontal: spacing.sm
+  },
+  disabledMarketText: {
+    color: colors.mutedStrong,
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center"
   },
   pickerButton: {
     alignItems: "center",

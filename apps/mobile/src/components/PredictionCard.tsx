@@ -1,11 +1,15 @@
-import { StyleSheet, Text, View, useWindowDimensions, type DimensionValue } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import type { Match, Player, Prediction, PredictionWinner } from "../shared";
 import {
+  calculatePredictionBreakdown,
   getPredictionStatusLabel,
   getPredictionStatusTone,
   getTeamDisplayName,
   isPlayerEligibleForMatch,
-  type PredictionDisplayStatus
+  type ExtraScoringStatus,
+  type PredictionDisplayStatus,
+  type PredictionPointsBreakdown,
+  type ScoringStatus
 } from "../shared";
 import { Pill } from "./ui";
 import { TeamFlag } from "./TeamFlag";
@@ -25,9 +29,8 @@ const getOfficialScoreLabel = (match?: Match | null) => {
   return `${safeNumberLabel(home)} x ${safeNumberLabel(away)}`;
 };
 
-const getUserPredictionScoreLabel = (prediction: Prediction) => {
-  return `${safeNumberLabel(prediction.predicted_home_score)} x ${safeNumberLabel(prediction.predicted_away_score)}`;
-};
+const getUserPredictionScoreLabel = (prediction: Prediction) =>
+  `${safeNumberLabel(prediction.predicted_home_score)} x ${safeNumberLabel(prediction.predicted_away_score)}`;
 
 const getPointsLabel = (prediction: Prediction, match?: Match | null) => {
   if (!match) return `${Number(prediction.points ?? 0)} pts`;
@@ -48,48 +51,159 @@ const boolLabel = (value?: boolean | null) => {
   if (value === false) return "Nao";
   return "-";
 };
+
+const isScoredStatus = (status: PredictionDisplayStatus) =>
+  status === "scored_win" || status === "scored_zero";
+
+const scoredPointsLabel = (points: number) => (points > 0 ? `+${points} pts` : "0 pts");
+
+const pointsTextFor = (points: number, pending: boolean) =>
+  pending ? "Aguardando resultado" : scoredPointsLabel(points);
+
+const resultToneFor = (status: ScoringStatus | ExtraScoringStatus) => {
+  if (status === "hit") return "hit";
+  if (status === "pending") return "pending";
+  if (status === "no_official_data" || status === "not_applicable") return "info";
+  return "miss";
+};
+
+const resultMarkFor = (status: ScoringStatus | ExtraScoringStatus) => {
+  if (status === "hit") return "OK";
+  if (status === "pending") return "...";
+  if (status === "no_official_data" || status === "not_applicable") return "-";
+  return "0";
+};
+
+const officialMarketsFor = (match: Match) => ({
+  awayScore: Number(match.away_score ?? 0),
+  firstScorer: match.first_goal_scorer,
+  firstScorerId: match.first_goal_scorer_id,
+  homeScore: Number(match.home_score ?? 0),
+  manOfMatch: match.man_of_match,
+  manOfMatchId: match.man_of_match_id
+});
+
+const predictionMarketsFor = (prediction: Prediction) => ({
+  awayScore: Number(prediction.predicted_away_score ?? 0),
+  bothTeamsScore: prediction.predicted_both_teams_score,
+  firstScorer: prediction.predicted_first_scorer,
+  firstScorerId: prediction.predicted_first_scorer_id,
+  homeScore: Number(prediction.predicted_home_score ?? 0),
+  manOfMatch: prediction.predicted_man_of_match,
+  manOfMatchId: prediction.predicted_man_of_match_id,
+  winner: prediction.predicted_winner
+});
+
 const resolvePredictionPlayerLabel = ({
-  playerId,
   fallbackName,
   match,
-  playerById
+  playerById,
+  playerId
 }: {
-  playerId?: string | null;
   fallbackName?: string | null;
   match: Match | null;
   playerById: Map<string, Player>;
-}): string => {
+  playerId?: string | null;
+}) => {
   const player = playerById.get(playerId ?? "");
 
-  if (player && match && isPlayerEligibleForMatch(player, match)) {
-    return player.name;
-  }
+  if (player && match && isPlayerEligibleForMatch(player, match)) return player.name;
+  if (player && match && !isPlayerEligibleForMatch(player, match)) return "Jogador invalido para esta partida";
 
-  if (player && match && !isPlayerEligibleForMatch(player, match)) {
-    return "Jogador inválido para esta partida";
-  }
-
-  return fallbackName?.trim() || "-";
+  return fallbackName?.trim() || "Nao selecionado";
 };
 
-const PredictionDetail = ({
-  basis,
-  compact,
+const firstScorerValue = ({
+  breakdown,
+  match,
+  playerById,
+  prediction,
+  scored
+}: {
+  breakdown: PredictionPointsBreakdown | null;
+  match: Match | null;
+  playerById: Map<string, Player>;
+  prediction: Prediction;
+  scored: boolean;
+}) => {
+  if (scored && breakdown?.extras.firstScorer.status === "not_applicable") return "Nao se aplica";
+  if (scored && breakdown?.extras.firstScorer.status === "no_official_data") return "Sem dado oficial";
+  return resolvePredictionPlayerLabel({
+    fallbackName: prediction.predicted_first_scorer,
+    match,
+    playerById,
+    playerId: prediction.predicted_first_scorer_id
+  });
+};
+
+const manOfMatchValue = ({
+  breakdown,
+  match,
+  playerById,
+  prediction,
+  scored
+}: {
+  breakdown: PredictionPointsBreakdown | null;
+  match: Match | null;
+  playerById: Map<string, Player>;
+  prediction: Prediction;
+  scored: boolean;
+}) => {
+  if (scored && breakdown?.extras.manOfMatch.status === "no_official_data") return "Sem dado oficial";
+  return resolvePredictionPlayerLabel({
+    fallbackName: prediction.predicted_man_of_match,
+    match,
+    playerById,
+    playerId: prediction.predicted_man_of_match_id
+  });
+};
+
+const BreakdownRow = ({
   label,
+  pointsLabel,
+  status,
   value
 }: {
-  basis: DimensionValue;
-  compact: boolean;
   label: string;
+  pointsLabel: string;
+  status: ScoringStatus | ExtraScoringStatus;
   value: string;
-}) => (
-  <View style={[styles.detailItem, compact && styles.detailItemCompact, { flexBasis: basis }]}>
-    <Text style={styles.detailLabel}>{label}</Text>
-    <Text numberOfLines={compact ? 3 : 2} style={styles.detailValue}>
-      {value}
-    </Text>
-  </View>
-);
+}) => {
+  const tone = resultToneFor(status);
+
+  return (
+    <View style={styles.breakdownRow}>
+      <View
+        style={[
+          styles.resultMark,
+          tone === "hit" && styles.resultMarkHit,
+          tone === "miss" && styles.resultMarkMiss,
+          tone === "pending" && styles.resultMarkPending,
+          tone === "info" && styles.resultMarkInfo
+        ]}
+      >
+        <Text
+          style={[
+            styles.resultMarkText,
+            tone === "hit" && styles.resultMarkTextHit,
+            tone === "miss" && styles.resultMarkTextMiss,
+            tone === "pending" && styles.resultMarkTextPending,
+            tone === "info" && styles.resultMarkTextInfo
+          ]}
+        >
+          {resultMarkFor(status)}
+        </Text>
+      </View>
+      <View style={styles.breakdownTextBox}>
+        <Text style={styles.breakdownLabel}>{label}</Text>
+        <Text numberOfLines={2} style={styles.breakdownValue}>{value}</Text>
+      </View>
+      <Text style={[styles.breakdownPoints, status === "hit" ? styles.breakdownPointsHit : styles.breakdownPointsMuted]}>
+        {pointsLabel}
+      </Text>
+    </View>
+  );
+};
 
 const TeamSide = ({
   align,
@@ -148,20 +262,22 @@ export const PredictionCard = ({
 }) => {
   const { width } = useWindowDimensions();
   const compact = width < COMPACT_BREAKPOINT;
-  const detailBasis: DimensionValue = compact
-    ? "100%"
-    : width >= 1024
-      ? "18%"
-      : width >= 768
-        ? "30%"
-        : "48%";
   const statusLabel = getPredictionStatusLabel(displayStatus);
   const statusTone = getPredictionStatusTone(displayStatus);
   const officialScore = getOfficialScoreLabel(match);
   const userPredictionScore = getUserPredictionScoreLabel(prediction);
-  const pointsLabel = getPointsLabel(prediction, match);
   const scoreContext =
     match?.status === "encerrado" ? "Placar final" : match?.status === "ao_vivo" ? "Ao vivo" : "Placar oficial";
+  const scored = Boolean(match && isScoredStatus(displayStatus));
+  const breakdown = match && scored
+    ? calculatePredictionBreakdown(officialMarketsFor(match), predictionMarketsFor(prediction))
+    : null;
+  const totalPoints = scored ? Number(prediction.points ?? 0) : 0;
+  const pointsLabel = scored ? `${totalPoints} pts` : getPointsLabel(prediction, match);
+  const mainStatus = breakdown?.main.status ?? "pending";
+  const firstScorerStatus = breakdown?.extras.firstScorer.status ?? "pending";
+  const bothTeamsStatus = breakdown?.extras.bothTeamsScore.status ?? "pending";
+  const manOfMatchStatus = breakdown?.extras.manOfMatch.status ?? "pending";
 
   return (
     <View style={styles.predictionCard}>
@@ -213,76 +329,55 @@ export const PredictionCard = ({
         <View
           style={[
             styles.pointsBadge,
-            prediction.points && prediction.points > 0 ? styles.pointsBadgePositive : styles.pointsBadgeNeutral
+            totalPoints > 0 ? styles.pointsBadgePositive : styles.pointsBadgeNeutral
           ]}
         >
           <Text
-            style={[
-              styles.pointsText,
-              compact && styles.pointsTextCompact,
-              prediction.points && prediction.points > 0 ? styles.pointsPositive : styles.pointsNeutral
-            ]}
-          >
-            {pointsLabel}
-          </Text>
-        </View>
+          style={[
+            styles.pointsText,
+            compact && styles.pointsTextCompact,
+            totalPoints > 0 ? styles.pointsPositive : styles.pointsNeutral
+          ]}
+        >
+          <Text style={styles.pointsBadgeLabel}>Total </Text>
+          {pointsLabel}
+        </Text>
+      </View>
       </View>
 
-      <View style={[styles.detailsGrid, compact ? styles.detailsGridCompact : styles.detailsGridWide]}>
-        <PredictionDetail
-          basis={detailBasis}
-          compact={compact}
-          label="Vencedor"
-          value={winnerLabel(prediction.predicted_winner, match)}
+      <View style={styles.breakdownBox}>
+        <Text style={styles.breakdownSectionTitle}>Palpite Principal</Text>
+        <BreakdownRow
+          label={breakdown?.main.label ?? "Aguardando resultado"}
+          pointsLabel={pointsTextFor(breakdown?.main.points ?? 0, !scored)}
+          status={mainStatus}
+          value={`${userPredictionScore} - ${winnerLabel(prediction.predicted_winner, match)}`}
         />
 
-        <PredictionDetail
-          basis={detailBasis}
-          compact={compact}
+        <Text style={[styles.breakdownSectionTitle, styles.breakdownSectionSpacing]}>Extras</Text>
+        <BreakdownRow
           label="Primeiro gol"
-          value={
-            prediction.predicted_first_goal_no_goals
-              ? "Sem gols"
-              : resolvePredictionPlayerLabel({
-                  playerId: prediction.predicted_first_scorer_id,
-                  fallbackName: prediction.predicted_first_scorer,
-                  match,
-                  playerById
-                })
-          }
+          pointsLabel={pointsTextFor(breakdown?.extras.firstScorer.points ?? 0, !scored)}
+          status={firstScorerStatus}
+          value={firstScorerValue({ breakdown, match, playerById, prediction, scored })}
         />
-
-        <PredictionDetail
-          basis={detailBasis}
-          compact={compact}
+        <BreakdownRow
           label="Ambos marcam"
+          pointsLabel={pointsTextFor(breakdown?.extras.bothTeamsScore.points ?? 0, !scored)}
+          status={bothTeamsStatus}
           value={boolLabel(prediction.predicted_both_teams_score)}
         />
-
-        <PredictionDetail
-          basis={detailBasis}
-          compact={compact}
-          label="MVP"
-          value={
-            resolvePredictionPlayerLabel({
-              playerId: prediction.predicted_man_of_match_id,
-              fallbackName: prediction.predicted_man_of_match,
-              match,
-              playerById
-            })
-          }
-        />
-
-        <PredictionDetail
-          basis={detailBasis}
-          compact={compact}
-          label="Vermelho"
-          value={boolLabel(prediction.predicted_red_card)}
+        <BreakdownRow
+          label="Craque"
+          pointsLabel={pointsTextFor(breakdown?.extras.manOfMatch.points ?? 0, !scored)}
+          status={manOfMatchStatus}
+          value={manOfMatchValue({ breakdown, match, playerById, prediction, scored })}
         />
       </View>
     </View>
   );
 };
+
 const styles = StyleSheet.create({
   predictionCard: {
     backgroundColor: colors.surfaceGlass,
@@ -460,6 +555,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "900"
   },
+  pointsBadgeLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
   pointsTextCompact: {
     alignSelf: "flex-start"
   },
@@ -469,43 +570,101 @@ const styles = StyleSheet.create({
   pointsNeutral: {
     color: colors.muted
   },
-  detailsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.xs
-  },
-  detailsGridCompact: {
-    justifyContent: "flex-start"
-  },
-  detailsGridWide: {
-    justifyContent: "flex-start"
-  },
-  detailItem: {
+  breakdownBox: {
     backgroundColor: colors.surfaceDeep,
     borderColor: colors.border,
     borderRadius: radius.sm,
     borderWidth: 1,
-    flexGrow: 1,
-    maxWidth: "100%",
-    minWidth: 108,
+    gap: spacing.xs,
+    padding: spacing.sm
+  },
+  breakdownSectionTitle: {
+    color: colors.gold,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  breakdownSectionSpacing: {
+    marginTop: spacing.xs
+  },
+  breakdownRow: {
+    alignItems: "center",
+    backgroundColor: colors.whiteSoft,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.xs,
+    minHeight: 52,
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs
   },
-  detailItemCompact: {
-    minWidth: 0,
-    width: "100%"
+  breakdownTextBox: {
+    flex: 1,
+    minWidth: 0
   },
-  detailLabel: {
+  breakdownLabel: {
     color: colors.muted,
     fontSize: 10,
     fontWeight: "900",
-    letterSpacing: 0,
     textTransform: "uppercase"
   },
-  detailValue: {
+  breakdownValue: {
     color: colors.text,
     fontSize: 12,
     fontWeight: "800",
-    marginTop: 4
+    marginTop: 2
+  },
+  breakdownPoints: {
+    flexShrink: 0,
+    fontSize: 12,
+    fontWeight: "900",
+    textAlign: "right"
+  },
+  breakdownPointsHit: {
+    color: colors.green
+  },
+  breakdownPointsMuted: {
+    color: colors.mutedStrong
+  },
+  resultMark: {
+    alignItems: "center",
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: "center",
+    width: 34
+  },
+  resultMarkHit: {
+    backgroundColor: colors.greenSoft,
+    borderColor: colors.greenBorder
+  },
+  resultMarkInfo: {
+    backgroundColor: colors.goldSoft,
+    borderColor: colors.borderGoldStrong
+  },
+  resultMarkMiss: {
+    backgroundColor: colors.whiteSoft,
+    borderColor: colors.border
+  },
+  resultMarkPending: {
+    backgroundColor: colors.blueSoft,
+    borderColor: colors.blueBorder
+  },
+  resultMarkText: {
+    fontSize: 10,
+    fontWeight: "900"
+  },
+  resultMarkTextHit: {
+    color: colors.green
+  },
+  resultMarkTextInfo: {
+    color: colors.gold
+  },
+  resultMarkTextMiss: {
+    color: colors.muted
+  },
+  resultMarkTextPending: {
+    color: colors.blue
   }
 });

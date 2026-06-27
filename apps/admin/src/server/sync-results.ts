@@ -301,13 +301,11 @@ const predictionPointsFor = (match: MatchRow, prediction: PredictionRow) => {
     },
     {
       awayScore: Number(prediction.predicted_away_score ?? 0),
-      bothTeamsScore: prediction.predicted_both_teams_score,
       firstScorer: prediction.predicted_first_scorer,
       firstScorerId: prediction.predicted_first_scorer_id,
       homeScore: Number(prediction.predicted_home_score ?? 0),
       manOfMatch: prediction.predicted_man_of_match,
       manOfMatchId: prediction.predicted_man_of_match_id,
-      winner: prediction.predicted_winner,
     },
   );
 };
@@ -319,8 +317,6 @@ const outcomeForScore = (homeScore: number, awayScore: number): PredictionWinner
 };
 
 const predictionOutcomeFor = (prediction: PredictionRow): PredictionWinner => {
-  if (prediction.predicted_winner) return prediction.predicted_winner;
-
   return outcomeForScore(
     Number(prediction.predicted_home_score ?? 0),
     Number(prediction.predicted_away_score ?? 0),

@@ -6,6 +6,7 @@ import {
   getPredictionStatusTone,
   getTeamDisplayName,
   isPlayerEligibleForMatch,
+  predictionOutcome,
   type ExtraScoringStatus,
   type PredictionDisplayStatus,
   type PredictionPointsBreakdown,
@@ -85,13 +86,11 @@ const officialMarketsFor = (match: Match) => ({
 
 const predictionMarketsFor = (prediction: Prediction) => ({
   awayScore: Number(prediction.predicted_away_score ?? 0),
-  bothTeamsScore: prediction.predicted_both_teams_score,
   firstScorer: prediction.predicted_first_scorer,
   firstScorerId: prediction.predicted_first_scorer_id,
   homeScore: Number(prediction.predicted_home_score ?? 0),
   manOfMatch: prediction.predicted_man_of_match,
   manOfMatchId: prediction.predicted_man_of_match_id,
-  winner: prediction.predicted_winner
 });
 
 const resolvePredictionPlayerLabel = ({
@@ -266,6 +265,10 @@ export const PredictionCard = ({
   const statusTone = getPredictionStatusTone(displayStatus);
   const officialScore = getOfficialScoreLabel(match);
   const userPredictionScore = getUserPredictionScoreLabel(prediction);
+  const predictedHomeScore = Number(prediction.predicted_home_score ?? 0);
+  const predictedAwayScore = Number(prediction.predicted_away_score ?? 0);
+  const predictedOutcome = predictionOutcome({ awayScore: predictedAwayScore, homeScore: predictedHomeScore });
+  const predictedBothTeamsScore = predictedHomeScore > 0 && predictedAwayScore > 0;
   const scoreContext =
     match?.status === "encerrado" ? "Placar final" : match?.status === "ao_vivo" ? "Ao vivo" : "Placar oficial";
   const scored = Boolean(match && isScoredStatus(displayStatus));
@@ -351,7 +354,7 @@ export const PredictionCard = ({
           label={breakdown?.main.label ?? "Aguardando resultado"}
           pointsLabel={pointsTextFor(breakdown?.main.points ?? 0, !scored)}
           status={mainStatus}
-          value={`${userPredictionScore} - ${winnerLabel(prediction.predicted_winner, match)}`}
+          value={`${userPredictionScore} - ${winnerLabel(predictedOutcome, match)}`}
         />
 
         <Text style={[styles.breakdownSectionTitle, styles.breakdownSectionSpacing]}>Extras</Text>
@@ -365,7 +368,7 @@ export const PredictionCard = ({
           label="Ambos marcam"
           pointsLabel={pointsTextFor(breakdown?.extras.bothTeamsScore.points ?? 0, !scored)}
           status={bothTeamsStatus}
-          value={boolLabel(prediction.predicted_both_teams_score)}
+          value={boolLabel(predictedBothTeamsScore)}
         />
         <BreakdownRow
           label="Craque"

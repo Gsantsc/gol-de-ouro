@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { CheckCircle2, Clock, Minus, Plus, Search, Send, UserRound, X } from "lucide-react-native";
-import type { Match, Player, Prediction, PredictionWinner } from "../shared";
+import type { Match, Player, Prediction } from "../shared";
 import {
   PREDICTION_SCORE_MAX,
   PREDICTION_SCORE_MIN,
@@ -36,6 +36,12 @@ const isPlaceholderTeam = (teamName: string) =>
 
 const boolLabel = (value: boolean) => (value ? "Sim" : "Não");
 
+const outcomeLabel = (outcome: ReturnType<typeof predictionOutcome>, homeTeamName: string, awayTeamName: string) => {
+  if (outcome === "home") return `Vitória do mandante (${homeTeamName})`;
+  if (outcome === "away") return `Vitória do visitante (${awayTeamName})`;
+  return "Empate";
+};
+
 export const PredictionScreen = ({
   match,
   prediction,
@@ -54,14 +60,7 @@ export const PredictionScreen = ({
   const { profile } = useAuth();
   const [homeScore, setHomeScore] = useState(clampPredictionScore(prediction?.predicted_home_score ?? 0));
   const [awayScore, setAwayScore] = useState(clampPredictionScore(prediction?.predicted_away_score ?? 0));
-  const [winner, setWinner] = useState<PredictionWinner>(
-    prediction?.predicted_winner ?? predictionOutcome({
-      awayScore: prediction?.predicted_away_score ?? 0,
-      homeScore: prediction?.predicted_home_score ?? 0
-    })
-  );
   const [firstScorerId, setFirstScorerId] = useState<string | null>(prediction?.predicted_first_scorer_id ?? null);
-  const [bothTeamsScore, setBothTeamsScore] = useState(prediction?.predicted_both_teams_score ?? false);
   const [manOfMatchId, setManOfMatchId] = useState<string | null>(prediction?.predicted_man_of_match_id ?? null);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -76,6 +75,9 @@ export const PredictionScreen = ({
   const manOfMatchPlayer = manOfMatchCandidate && isPlayerEligibleForMatch(manOfMatchCandidate, match) ? manOfMatchCandidate : null;
   const homeTeamName = getTeamDisplayName(match.home_team);
   const awayTeamName = getTeamDisplayName(match.away_team);
+  const automaticWinner = predictionOutcome({ awayScore, homeScore });
+  const automaticBothTeamsScore = homeScore > 0 && awayScore > 0;
+  const automaticWinnerLabel = outcomeLabel(automaticWinner, homeTeamName, awayTeamName);
   const firstScorerLabel = firstScorerDisabled ? "Nao se aplica" : firstScorerPlayer?.name ?? (firstScorerCandidate && !isPlayerEligibleForMatch(firstScorerCandidate, match) ? "Jogador inválido para esta partida" : "Não selecionado");
   const manOfMatchLabel = manOfMatchPlayer?.name ?? (manOfMatchCandidate && !isPlayerEligibleForMatch(manOfMatchCandidate, match) ? "Jogador inválido para esta partida" : "Não selecionado");
 
@@ -91,7 +93,6 @@ export const PredictionScreen = ({
     if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) {
       return "Preencha o placar para enviar seu palpite.";
     }
-    if (!winner) return "Selecione o vencedor para continuar.";
     if (!firstScorerDisabled && firstScorerId && !firstScorerPlayer) {
       return "Selecione apenas jogadores das seleções desta partida.";
     }
@@ -121,10 +122,8 @@ export const PredictionScreen = ({
         matchId: match.id,
         homeScore: normalizedHomeScore,
         awayScore: normalizedAwayScore,
-        winner,
         firstScorer: null,
         firstScorerId: firstScorerDisabled ? null : firstScorerId,
-        bothTeamsScore,
         manOfMatch: null,
         manOfMatchId
       });
@@ -196,13 +195,9 @@ export const PredictionScreen = ({
               </Text>
             </View>
 
-            <View style={styles.marketSection}>
-              <Text style={styles.marketTitle}>Vencedor</Text>
-              <View style={styles.choiceGrid}>
-                <ChoiceButton active={winner === "home"} label={homeTeamName} onPress={() => setWinner("home")} />
-                <ChoiceButton active={winner === "draw"} label="Empate" onPress={() => setWinner("draw")} />
-                <ChoiceButton active={winner === "away"} label={awayTeamName} onPress={() => setWinner("away")} />
-              </View>
+            <View style={styles.autoResultBox}>
+              <Text style={styles.fieldLabel}>Resultado do seu palpite</Text>
+              <Text style={styles.autoResultText}>{automaticWinnerLabel}</Text>
             </View>
 
             <View style={styles.fieldGrid}>
@@ -231,18 +226,14 @@ export const PredictionScreen = ({
               />
             </View>
 
-            <View style={styles.fieldGrid}>
-              <ToggleChoice label="Ambos marcam" onChange={setBothTeamsScore} value={bothTeamsScore} />
-            </View>
-
             <View style={styles.summaryBox}>
               <Text style={styles.summaryTitle}>Resumo do palpite</Text>
               <View style={styles.summaryGrid}>
                 <SummaryItem label="Placar" value={`${homeScore} x ${awayScore}`} />
-                <SummaryItem label="Vencedor" value={winner === "home" ? homeTeamName : winner === "away" ? awayTeamName : "Empate"} />
+                <SummaryItem label="Resultado" value={automaticWinnerLabel} />
                 <SummaryItem label="Primeiro jogador" value={firstScorerLabel} />
                 <SummaryItem label="Homem do jogo" value={manOfMatchLabel} />
-                <SummaryItem label="Ambos marcam" value={boolLabel(bothTeamsScore)} />
+                <SummaryItem label="Ambos marcam" value={boolLabel(automaticBothTeamsScore)} />
               </View>
             </View>
 
@@ -292,12 +283,6 @@ const Stepper = ({
       </IconButton>
     </View>
   </View>
-);
-
-const ChoiceButton = ({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) => (
-  <Pressable accessibilityRole="button" onPress={onPress} style={[styles.choiceButton, active && styles.choiceButtonActive]}>
-    <Text numberOfLines={2} style={[styles.choiceText, active && styles.choiceTextActive]}>{label}</Text>
-  </Pressable>
 );
 
 const PlayerPicker = ({
@@ -399,24 +384,6 @@ const SummaryItem = ({ label, value }: { label: string; value: string }) => (
   <View style={styles.summaryItem}>
     <Text style={styles.summaryLabel}>{label}</Text>
     <Text numberOfLines={1} style={styles.summaryValue}>{value}</Text>
-  </View>
-);
-
-const ToggleChoice = ({
-  label,
-  onChange,
-  value
-}: {
-  label: string;
-  onChange: (value: boolean) => void;
-  value: boolean;
-}) => (
-  <View style={styles.field}>
-    <Text style={styles.fieldLabel}>{label}</Text>
-    <View style={styles.toggleRow}>
-      <ChoiceButton active={value} label="Sim" onPress={() => onChange(true)} />
-      <ChoiceButton active={!value} label="Não" onPress={() => onChange(false)} />
-    </View>
   </View>
 );
 
@@ -551,45 +518,19 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: "center"
   },
-  marketSection: {
-    gap: spacing.sm,
-    marginBottom: spacing.md
-  },
-  marketTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "900"
-  },
-  choiceGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm
-  },
-  choiceButton: {
-    alignItems: "center",
-    backgroundColor: "rgba(24, 33, 49, 0.72)",
-    borderColor: colors.border,
+  autoResultBox: {
+    backgroundColor: "rgba(212, 175, 55, 0.10)",
+    borderColor: "rgba(246, 211, 101, 0.20)",
     borderRadius: radius.sm,
     borderWidth: 1,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 44,
-    minWidth: 86,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs
+    marginBottom: spacing.md,
+    padding: spacing.sm
   },
-  choiceButtonActive: {
-    backgroundColor: colors.gold,
-    borderColor: colors.gold
-  },
-  choiceText: {
-    color: colors.muted,
-    fontSize: 12,
+  autoResultText: {
+    color: colors.text,
+    fontSize: 14,
     fontWeight: "900",
-    textAlign: "center"
-  },
-  choiceTextActive: {
-    color: colors.black
+    marginTop: spacing.xs
   },
   fieldGrid: {
     flexDirection: "row",
@@ -777,9 +718,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
     marginTop: 2
-  },
-  toggleRow: {
-    flexDirection: "row",
-    gap: spacing.sm
   }
 });

@@ -13,10 +13,8 @@ export type OfficialPredictionMarkets = ScoreInput & {
 };
 
 export type UserPredictionMarkets = ScoreInput & {
-  winner?: PredictionOutcome | null;
   firstScorer?: string | null;
   firstScorerId?: string | null;
-  bothTeamsScore?: boolean | null;
   manOfMatch?: string | null;
   manOfMatchId?: string | null;
 };
@@ -77,7 +75,7 @@ export const calculatePredictionBreakdown = (
   _options: ScoringOptions = {},
 ): PredictionPointsBreakdown => {
   const exact = official.homeScore === prediction.homeScore && official.awayScore === prediction.awayScore;
-  const winner = prediction.winner ?? predictionOutcome(prediction);
+  const winner = predictionOutcome(prediction);
   const sameOutcome = predictionOutcome(official) === winner;
   const isNoGoalMatch = official.homeScore === 0 && official.awayScore === 0;
 
@@ -117,10 +115,9 @@ export const calculatePredictionBreakdown = (
           status: firstScorerHit ? "hit" as const : "miss" as const,
         };
 
-  const bothTeamsScoreHit =
-    prediction.bothTeamsScore !== null
-    && prediction.bothTeamsScore !== undefined
-    && prediction.bothTeamsScore === (official.homeScore > 0 && official.awayScore > 0);
+  const predictedBothTeamsScore = prediction.homeScore > 0 && prediction.awayScore > 0;
+  const officialBothTeamsScore = official.homeScore > 0 && official.awayScore > 0;
+  const bothTeamsScoreHit = predictedBothTeamsScore === officialBothTeamsScore;
   const bothTeamsScore = {
     label: bothTeamsScoreHit ? "Ambos marcam correto" : "Ambos marcam errado",
     maxPoints: 2 as const,

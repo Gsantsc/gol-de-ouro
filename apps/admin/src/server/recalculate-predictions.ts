@@ -95,13 +95,11 @@ const predictionPointsFor = (match: MatchRow, prediction: PredictionRow) => {
     },
     {
       awayScore: Number(prediction.predicted_away_score ?? 0),
-      bothTeamsScore: prediction.predicted_both_teams_score,
       firstScorer: prediction.predicted_first_scorer,
       firstScorerId: prediction.predicted_first_scorer_id,
       homeScore: Number(prediction.predicted_home_score ?? 0),
       manOfMatch: prediction.predicted_man_of_match,
       manOfMatchId: prediction.predicted_man_of_match_id,
-      winner: prediction.predicted_winner,
     },
   );
 };
@@ -298,12 +296,10 @@ for (const user of users) {
       awayScore: Number(match.away_score ?? 0),
     });
 
-    const predictedWinner =
-      prediction.predicted_winner ??
-      predictionOutcome({
-        homeScore: Number(prediction.predicted_home_score ?? 0),
-        awayScore: Number(prediction.predicted_away_score ?? 0),
-      });
+    const predictedWinner = predictionOutcome({
+      homeScore: Number(prediction.predicted_home_score ?? 0),
+      awayScore: Number(prediction.predicted_away_score ?? 0),
+    });
 
     return officialOutcome === predictedWinner;
   }).length;
@@ -327,12 +323,10 @@ for (const user of users) {
       awayScore: Number(match.away_score ?? 0),
     });
 
-    const predictedWinner =
-      prediction.predicted_winner ??
-      predictionOutcome({
-        homeScore: Number(prediction.predicted_home_score ?? 0),
-        awayScore: Number(prediction.predicted_away_score ?? 0),
-      });
+    const predictedWinner = predictionOutcome({
+      homeScore: Number(prediction.predicted_home_score ?? 0),
+      awayScore: Number(prediction.predicted_away_score ?? 0),
+    });
 
     return officialOutcome === predictedWinner;
   }).length;

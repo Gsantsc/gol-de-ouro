@@ -8,12 +8,11 @@ import type {
   Notification,
   Player,
   Prediction,
-  PredictionWinner,
   Profile,
   Ranking,
   Tournament
 } from "@gol-de-ouro/shared";
-import { sortRankings } from "@gol-de-ouro/shared";
+import { predictionOutcome, sortRankings } from "@gol-de-ouro/shared";
 import { withSupabaseTimeout } from "./async-control";
 import { supabase } from "./supabase";
 
@@ -398,42 +397,40 @@ export const revokeUserAppInvite = async (inviteId: string) => {
 
 export const submitUserPrediction = async ({
   awayScore,
-  bothTeamsScore,
   firstScorer: _firstScorer,
   firstScorerId,
   homeScore,
   manOfMatch: _manOfMatch,
   manOfMatchId,
   matchId,
-  winner,
   userId
 }: {
   awayScore: number;
-  bothTeamsScore: boolean;
   firstScorer: string | null;
   firstScorerId: string | null;
   homeScore: number;
   manOfMatch: string | null;
   manOfMatchId: string | null;
   matchId: string;
-  winner: PredictionWinner;
   userId: string;
 }) => {
+  const predictedWinner = predictionOutcome({ awayScore, homeScore });
+  const predictedBothTeamsScore = homeScore > 0 && awayScore > 0;
   const rpcPayload = {
     away_score_value: awayScore,
-    both_teams_score_value: bothTeamsScore,
+    both_teams_score_value: predictedBothTeamsScore,
     first_goal_no_goals_value: false,
     first_scorer_id_value: firstScorerId,
     home_score_value: homeScore,
     man_of_match_id_value: manOfMatchId,
-    predicted_winner_value: winner,
+    predicted_winner_value: predictedWinner,
     red_card_value: false,
     target_match_id: matchId
   };
   const directPayload = {
     match_id: matchId,
     predicted_away_score: awayScore,
-    predicted_both_teams_score: bothTeamsScore,
+    predicted_both_teams_score: predictedBothTeamsScore,
     predicted_first_goal_no_goals: false,
     predicted_first_scorer: null,
     predicted_first_scorer_id: firstScorerId,
@@ -441,7 +438,7 @@ export const submitUserPrediction = async ({
     predicted_man_of_match: null,
     predicted_man_of_match_id: manOfMatchId,
     predicted_red_card: false,
-    predicted_winner: winner,
+    predicted_winner: predictedWinner,
     user_id: userId
   };
 

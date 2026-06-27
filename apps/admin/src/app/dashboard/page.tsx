@@ -194,6 +194,12 @@ const outcomeFromScore = (homeScore: number, awayScore: number): PredictionWinne
   return "draw";
 };
 
+const automaticOutcomeLabel = (winner: PredictionWinner, match: Match) => {
+  if (winner === "home") return `Vitória do mandante (${getTeamDisplayName(match.home_team)})`;
+  if (winner === "away") return `Vitória do visitante (${getTeamDisplayName(match.away_team)})`;
+  return "Empate";
+};
+
 const normalizePredictionScore = (value: string) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return PREDICTION_SCORE_MIN;
@@ -202,13 +208,11 @@ const normalizePredictionScore = (value: string) => {
 
 type PredictionSubmitPayload = {
   awayScore: number;
-  bothTeamsScore: boolean;
   firstScorer: string | null;
   firstScorerId: string | null;
   homeScore: number;
   manOfMatch: string | null;
   manOfMatchId: string | null;
-  winner: PredictionWinner;
 };
 
 export default function UserDashboardPage() {
@@ -1295,7 +1299,10 @@ const PredictionSection = ({
                 Enviado: {formatDateTimePtBr(prediction.submitted_at)}
               </p>
               <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
-                <PredictionDetail label="Vencedor" value={winnerLabel(prediction.predicted_winner, match)} />
+                <PredictionDetail
+                  label="Resultado"
+                  value={winnerLabel(outcomeFromScore(Number(prediction.predicted_home_score ?? 0), Number(prediction.predicted_away_score ?? 0)), match)}
+                />
                 <PredictionDetail
                   label="Primeiro gol"
                   value={
@@ -1304,7 +1311,10 @@ const PredictionSection = ({
                       : playerById.get(prediction.predicted_first_scorer_id ?? "")?.name ?? marketText(prediction.predicted_first_scorer)
                   }
                 />
-                <PredictionDetail label="Ambos marcam" value={boolLabel(prediction.predicted_both_teams_score)} />
+                <PredictionDetail
+                  label="Ambos marcam"
+                  value={boolLabel(Number(prediction.predicted_home_score ?? 0) > 0 && Number(prediction.predicted_away_score ?? 0) > 0)}
+                />
                 <PredictionDetail
                   label="Homem do jogo"
                   value={playerById.get(prediction.predicted_man_of_match_id ?? "")?.name ?? marketText(prediction.predicted_man_of_match)}
@@ -1748,16 +1758,15 @@ const PredictionDialog = ({
   onSubmit: (payload: PredictionSubmitPayload) => Promise<void>;
 }) => {
   const [awayScore, setAwayScore] = useState(String(prediction?.predicted_away_score ?? 0));
-  const [bothTeamsScore, setBothTeamsScore] = useState<boolean>(prediction?.predicted_both_teams_score ?? false);
   const [homeScore, setHomeScore] = useState(String(prediction?.predicted_home_score ?? 0));
   const [firstScorerId, setFirstScorerId] = useState<string | null>(prediction?.predicted_first_scorer_id ?? null);
   const [manOfMatchId, setManOfMatchId] = useState<string | null>(prediction?.predicted_man_of_match_id ?? null);
-  const [winner, setWinner] = useState<PredictionWinner>(
-    prediction?.predicted_winner ?? outcomeFromScore(prediction?.predicted_home_score ?? 0, prediction?.predicted_away_score ?? 0),
-  );
   const parsedHomeScore = normalizePredictionScore(homeScore);
   const parsedAwayScore = normalizePredictionScore(awayScore);
   const predictionAccess = canSubmitPrediction(match, null, new Date(), predictionLockMinutes);
+  const automaticWinner = outcomeFromScore(parsedHomeScore, parsedAwayScore);
+  const automaticBothTeamsScore = parsedHomeScore > 0 && parsedAwayScore > 0;
+  const automaticWinnerLabel = automaticOutcomeLabel(automaticWinner, match);
   const firstScorerDisabled = parsedHomeScore === 0 && parsedAwayScore === 0;
   const firstScorerLabel = firstScorerDisabled
     ? "Não se aplica para 0x0"
@@ -1779,13 +1788,11 @@ const PredictionDialog = ({
           if (!predictionAccess.allowed) return;
           onSubmit({
             awayScore: parsedAwayScore,
-            bothTeamsScore,
             firstScorer: null,
             firstScorerId: firstScorerDisabled ? null : firstScorerId,
             homeScore: parsedHomeScore,
             manOfMatch: null,
             manOfMatchId,
-            winner,
           }).catch(console.error);
         }}
       >
@@ -1823,23 +1830,10 @@ const PredictionDialog = ({
           </label>
         </div>
 
-        <div className="mt-5">
-          <p className="text-sm font-black text-white/70">Vencedor</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            {([
-              ["home", getTeamDisplayName(match.home_team)],
-              ["draw", "Empate"],
-              ["away", getTeamDisplayName(match.away_team)],
-            ] as Array<[PredictionWinner, string]>).map(([value, label]) => (
-              <button
-                className={`segmented-chip ${winner === value ? "segmented-chip-active" : "segmented-chip-idle"}`}
-                key={value}
-                onClick={() => setWinner(value)}
-                type="button"
-              >
-                {label}
-              </button>
-            ))}
+        <div className="mt-5 rounded-md border border-gold/20 bg-gold/10 p-3">
+          <p className="text-sm font-black text-white/70">Resultado do seu palpite</p>
+          <div className="mt-2 text-sm font-black text-white">
+            {automaticWinnerLabel}
           </div>
         </div>
 
@@ -1869,14 +1863,6 @@ const PredictionDialog = ({
           />
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <ToggleChoice
-            label="Ambos marcam"
-            onChange={setBothTeamsScore}
-            value={bothTeamsScore}
-          />
-        </div>
-
         <div className="mt-5 rounded-md border border-gold/20 bg-gold/10 p-3 text-xs font-bold leading-5 text-white/65">
           {predictionAccess.allowed
             ? "A tela Jogos mostra apenas que o palpite foi enviado. O detalhe completo fica salvo na aba Palpites."
@@ -1886,10 +1872,10 @@ const PredictionDialog = ({
           <p className="text-xs font-black uppercase text-gold">Resumo do palpite</p>
           <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
             <PredictionDetail label="Placar" value={`${parsedHomeScore} x ${parsedAwayScore}`} />
-            <PredictionDetail label="Vencedor" value={winnerLabel(winner, match)} />
+            <PredictionDetail label="Resultado" value={automaticWinnerLabel} />
             <PredictionDetail label="Primeiro jogador" value={firstScorerLabel} />
             <PredictionDetail label="Homem do jogo" value={manOfMatchLabel} />
-            <PredictionDetail label="Ambos marcam" value={boolLabel(bothTeamsScore)} />
+            <PredictionDetail label="Ambos marcam" value={boolLabel(automaticBothTeamsScore)} />
           </div>
         </div>
         <div className="mt-6 flex gap-2">
@@ -1902,36 +1888,6 @@ const PredictionDialog = ({
     </div>
   );
 };
-
-const ToggleChoice = ({
-  label,
-  onChange,
-  value
-}: {
-  label: string;
-  onChange: (value: boolean) => void;
-  value: boolean;
-}) => (
-  <div>
-    <p className="text-sm font-black text-white/70">{label}</p>
-    <div className="mt-2 grid grid-cols-2 gap-2">
-      <button
-        className={`segmented-chip ${value ? "segmented-chip-active" : "segmented-chip-idle"}`}
-        onClick={() => onChange(true)}
-        type="button"
-      >
-        Sim
-      </button>
-      <button
-        className={`segmented-chip ${!value ? "segmented-chip-active" : "segmented-chip-idle"}`}
-        onClick={() => onChange(false)}
-        type="button"
-      >
-        Não
-      </button>
-    </div>
-  </div>
-);
 
 const SectionHeading = ({ title }: { title: string }) => (
   <h2 className="text-xl font-black text-white">{title}</h2>

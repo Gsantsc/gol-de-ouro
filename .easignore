@@ -23,3 +23,11 @@ docs
 
 build-output.txt
 typecheck-output.txt
+supabase/.branches
+supabase/.branches/**
+supabase/.temp
+supabase/.temp/**
+node_modules
+.next
+dist-pwa
+*.tsbuildinfo

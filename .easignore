@@ -31,3 +31,5 @@ node_modules
 .next
 dist-pwa
 *.tsbuildinfo
+.github
+.github/**

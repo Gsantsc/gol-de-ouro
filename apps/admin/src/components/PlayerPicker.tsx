@@ -9,11 +9,9 @@ type PlayerPickerProps = {
   disabled?: boolean;
   label: string;
   match: Match;
-  noGoals?: boolean;
-  onChange: (value: { noGoals?: boolean; player: Player | null }) => void;
+  onChange: (value: { player: Player | null }) => void;
   players: Player[];
   selectedPlayerId?: string | null;
-  showNoGoals?: boolean;
 };
 
 const normalize = (value: string) =>
@@ -36,11 +34,9 @@ export const PlayerPicker = ({
   disabled = false,
   label,
   match,
-  noGoals = false,
   onChange,
   players,
-  selectedPlayerId,
-  showNoGoals = false
+  selectedPlayerId
 }: PlayerPickerProps) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -58,7 +54,7 @@ export const PlayerPicker = ({
     ];
   }, [match.away_team, match.home_team, players, query]);
 
-  const display = noGoals ? "Sem gols" : playerLabel(selectedPlayer);
+  const display = playerLabel(selectedPlayer);
 
   return (
     <div className="min-w-0">
@@ -69,7 +65,7 @@ export const PlayerPicker = ({
         onClick={() => setOpen(true)}
         type="button"
       >
-        <span className={selectedPlayer || noGoals ? "truncate text-white" : "truncate text-white/45"}>
+        <span className={selectedPlayer ? "truncate text-white" : "truncate text-white/45"}>
           {display}
         </span>
         <UserRound className="h-4 w-4 shrink-0 text-gold" />
@@ -102,22 +98,6 @@ export const PlayerPicker = ({
             </div>
 
             <div className="max-h-[58vh] overflow-y-auto p-4">
-              {showNoGoals && (
-                <button
-                  className={`mb-3 flex w-full items-center justify-between rounded-md border px-3 py-3 text-left transition ${
-                    noGoals ? "border-gold bg-gold text-black" : "border-pitch-600 bg-pitch-950/35 text-white"
-                  }`}
-                  onClick={() => {
-                    onChange({ noGoals: true, player: null });
-                    setOpen(false);
-                  }}
-                  type="button"
-                >
-                  <span className="font-black">Sem gols</span>
-                  <span className="text-xs font-black uppercase opacity-70">0 x 0</span>
-                </button>
-              )}
-
               <div className="space-y-5">
                 {groups.map((group) => (
                   <section key={group.name}>
@@ -125,7 +105,7 @@ export const PlayerPicker = ({
                     {group.players.length ? (
                       <div className="grid gap-2 sm:grid-cols-2">
                         {group.players.map((player) => {
-                          const active = player.id === selectedPlayerId && !noGoals;
+                          const active = player.id === selectedPlayerId;
                           return (
                             <button
                               className={`rounded-md border px-3 py-3 text-left transition ${
@@ -133,7 +113,7 @@ export const PlayerPicker = ({
                               }`}
                               key={player.id}
                               onClick={() => {
-                                onChange({ noGoals: false, player });
+                                onChange({ player });
                                 setOpen(false);
                               }}
                               type="button"

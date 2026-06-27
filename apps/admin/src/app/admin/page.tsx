@@ -152,11 +152,9 @@ const tournamentTypes: TournamentType[] = [
 
 type MatchDraft = {
   away_score: string;
-  first_goal_no_goals: boolean;
   first_goal_scorer_id: string | null;
   home_score: string;
   man_of_match_id: string | null;
-  red_card_happened: boolean;
 };
 type MatchDensity = "comfortable" | "compact";
 type OfficialRosterPlayer = {
@@ -199,9 +197,6 @@ type MatchPlayersResponse = {
 type OfficialExtrasForm = {
   firstGoalSelection: string;
   manOfMatchId: string;
-  redCard: string;
-  redCardsAway: string;
-  redCardsHome: string;
 };
 type ToastMessage = { kind: "success" | "error"; message: string };
 type AdminActionOptions = {
@@ -218,7 +213,6 @@ const adminStatusClass: Record<MatchStatus, string> = {
 };
 
 const OFFICIAL_EXTRAS_EMPTY_VALUE = "__empty__";
-const OFFICIAL_EXTRAS_NO_GOALS_VALUE = "__no_goals__";
 const OFFICIAL_EXTRAS_SAVED_MESSAGE =
   "Extras oficiais salvos. Rode Recalcular pontuação desde o início para atualizar os pontos.";
 
@@ -1076,11 +1070,9 @@ const MatchesPanel = ({
           match.id,
           {
             away_score: String(match.away_score),
-            first_goal_no_goals: Boolean(match.first_goal_no_goals),
             first_goal_scorer_id: match.first_goal_scorer_id ?? null,
             home_score: String(match.home_score),
-            man_of_match_id: match.man_of_match_id ?? null,
-            red_card_happened: Boolean(match.red_card_happened ?? ((match.red_cards_home ?? 0) + (match.red_cards_away ?? 0) > 0))
+            man_of_match_id: match.man_of_match_id ?? null
           }
         ]),
       ),
@@ -1529,11 +1521,9 @@ const MatchesPanel = ({
                 {group.matches.map((match) => {
                   const draft = drafts[match.id] ?? {
                     away_score: String(match.away_score),
-                    first_goal_no_goals: Boolean(match.first_goal_no_goals),
                     first_goal_scorer_id: match.first_goal_scorer_id ?? null,
                     home_score: String(match.home_score),
-                    man_of_match_id: match.man_of_match_id ?? null,
-                    red_card_happened: Boolean(match.red_card_happened ?? ((match.red_cards_home ?? 0) + (match.red_cards_away ?? 0) > 0))
+                    man_of_match_id: match.man_of_match_id ?? null
                   };
 
                   return (
@@ -1619,9 +1609,7 @@ const AdminMatchCard = memo(function AdminMatchCard({
     Number(draft.home_score) !== match.home_score ||
     Number(draft.away_score) !== match.away_score ||
     draft.first_goal_scorer_id !== (match.first_goal_scorer_id ?? null) ||
-    draft.first_goal_no_goals !== Boolean(match.first_goal_no_goals) ||
-    draft.man_of_match_id !== (match.man_of_match_id ?? null) ||
-    draft.red_card_happened !== Boolean(match.red_card_happened ?? ((match.red_cards_home ?? 0) + (match.red_cards_away ?? 0) > 0));
+    draft.man_of_match_id !== (match.man_of_match_id ?? null);
   const saveActionKey = `match:${match.id}:save`;
   const finishActionKey = `match:${match.id}:finish`;
   const isSaving = actionKey === saveActionKey;
@@ -1726,22 +1714,19 @@ const AdminMatchCard = memo(function AdminMatchCard({
           </label>
         </div>
 
-        <div className="grid gap-2 md:grid-cols-[1fr_1fr_160px]">
+        <div className="grid gap-2 md:grid-cols-2">
           <PlayerPicker
             disabled={isCardBusy}
             label="Primeiro gol"
             match={match}
-            noGoals={draft.first_goal_no_goals}
-            onChange={({ noGoals, player }) =>
+            onChange={({ player }) =>
               onDraftChange({
                 ...draft,
-                first_goal_no_goals: Boolean(noGoals),
                 first_goal_scorer_id: player?.id ?? null
               })
             }
             players={players}
             selectedPlayerId={draft.first_goal_scorer_id}
-            showNoGoals
           />
           <PlayerPicker
             disabled={isCardBusy}
@@ -1756,18 +1741,6 @@ const AdminMatchCard = memo(function AdminMatchCard({
             players={players}
             selectedPlayerId={draft.man_of_match_id}
           />
-          <label className="block">
-            <span className="mb-1 block text-xs font-black uppercase text-white/45">Cartão vermelho</span>
-            <select
-              className="input w-full"
-              disabled={isCardBusy}
-              onChange={(event) => onDraftChange({ ...draft, red_card_happened: event.target.value === "true" })}
-              value={String(draft.red_card_happened)}
-            >
-              <option value="false">Não</option>
-              <option value="true">Sim</option>
-            </select>
-          </label>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-3 lg:flex lg:items-center">
@@ -1787,13 +1760,11 @@ const AdminMatchCard = memo(function AdminMatchCard({
               onAction(() =>
                 updateMatch(match.id, {
                   away_score: Number(draft.away_score),
-                  first_goal_no_goals: draft.first_goal_no_goals,
                   first_goal_scorer: null,
                   first_goal_scorer_id: draft.first_goal_scorer_id,
                   home_score: Number(draft.home_score),
                   man_of_match: null,
-                  man_of_match_id: draft.man_of_match_id,
-                  red_card_happened: draft.red_card_happened
+                  man_of_match_id: draft.man_of_match_id
                 }),
                 {
                   loadingKey: saveActionKey,
@@ -1824,13 +1795,11 @@ const AdminMatchCard = memo(function AdminMatchCard({
             const finished = await onAction(async () => {
               await updateMatch(match.id, {
                 away_score: Number(draft.away_score),
-                first_goal_no_goals: draft.first_goal_no_goals,
                 first_goal_scorer: null,
                 first_goal_scorer_id: draft.first_goal_scorer_id,
                 home_score: Number(draft.home_score),
                 man_of_match: null,
-                man_of_match_id: draft.man_of_match_id,
-                red_card_happened: draft.red_card_happened
+                man_of_match_id: draft.man_of_match_id
               });
               await finishMatchAndScore(match.id);
             }, {
@@ -1847,30 +1816,9 @@ const AdminMatchCard = memo(function AdminMatchCard({
 });
 
 const officialExtrasInitialFormFor = (match: Match): OfficialExtrasForm => ({
-  firstGoalSelection: match.first_goal_no_goals
-    ? OFFICIAL_EXTRAS_NO_GOALS_VALUE
-    : match.first_goal_scorer_id ?? OFFICIAL_EXTRAS_EMPTY_VALUE,
+  firstGoalSelection: match.first_goal_scorer_id ?? OFFICIAL_EXTRAS_EMPTY_VALUE,
   manOfMatchId: match.man_of_match_id ?? OFFICIAL_EXTRAS_EMPTY_VALUE,
-  redCard:
-    match.red_card_happened === true
-      ? "true"
-      : match.red_card_happened === false
-        ? "false"
-        : OFFICIAL_EXTRAS_EMPTY_VALUE,
-  redCardsAway: match.red_cards_away === null || match.red_cards_away === undefined ? "" : String(match.red_cards_away),
-  redCardsHome: match.red_cards_home === null || match.red_cards_home === undefined ? "" : String(match.red_cards_home),
 });
-
-const parseOptionalCardCount = (value: string, label: string) => {
-  if (!value.trim()) return null;
-
-  const count = Number(value);
-  if (!Number.isInteger(count) || count < 0) {
-    throw new Error(`${label} inválido.`);
-  }
-
-  return count;
-};
 
 const OfficialExtrasModal = ({
   match,
@@ -1943,7 +1891,6 @@ const OfficialExtrasModal = ({
     setForm((current) => {
       const nextFirstGoal =
         current.firstGoalSelection !== OFFICIAL_EXTRAS_EMPTY_VALUE
-        && current.firstGoalSelection !== OFFICIAL_EXTRAS_NO_GOALS_VALUE
         && !officialPlayerIds.has(current.firstGoalSelection)
           ? OFFICIAL_EXTRAS_EMPTY_VALUE
           : current.firstGoalSelection;
@@ -1972,7 +1919,6 @@ const OfficialExtrasModal = ({
     try {
       const firstGoalPlayerId =
         form.firstGoalSelection === OFFICIAL_EXTRAS_EMPTY_VALUE
-        || form.firstGoalSelection === OFFICIAL_EXTRAS_NO_GOALS_VALUE
           ? null
           : form.firstGoalSelection;
       const manOfMatchId = form.manOfMatchId === OFFICIAL_EXTRAS_EMPTY_VALUE ? null : form.manOfMatchId;
@@ -1986,15 +1932,8 @@ const OfficialExtrasModal = ({
       }
 
       const payload = {
-        first_goal_no_goals: form.firstGoalSelection === OFFICIAL_EXTRAS_NO_GOALS_VALUE,
         first_goal_scorer_id: firstGoalPlayerId,
         man_of_match_id: manOfMatchId,
-        red_card_happened:
-          form.redCard === OFFICIAL_EXTRAS_EMPTY_VALUE
-            ? null
-            : form.redCard === "true",
-        red_cards_away: parseOptionalCardCount(form.redCardsAway, "Cartões do visitante"),
-        red_cards_home: parseOptionalCardCount(form.redCardsHome, "Cartões da casa"),
       };
 
       setSaving(true);
@@ -2080,7 +2019,6 @@ const OfficialExtrasModal = ({
               value={form.firstGoalSelection}
             >
               <option value={OFFICIAL_EXTRAS_EMPTY_VALUE}>Não informado</option>
-              <option value={OFFICIAL_EXTRAS_NO_GOALS_VALUE}>Sem gols</option>
               {!blockPlayerOptions && officialPlayerGroups.map((group) => (
                 <optgroup key={group.label} label={group.label}>
                   {group.players.map((player) => (
@@ -2113,49 +2051,6 @@ const OfficialExtrasModal = ({
               ))}
             </select>
           </label>
-
-          <label className="block">
-            <span className="mb-1 block text-xs font-black uppercase text-white/45">Cartão vermelho</span>
-            <select
-              className="input w-full"
-              disabled={loading || saving}
-              onChange={(event) => setForm((current) => ({ ...current, redCard: event.target.value }))}
-              value={form.redCard}
-            >
-              <option value={OFFICIAL_EXTRAS_EMPTY_VALUE}>Não informado</option>
-              <option value="true">Sim</option>
-              <option value="false">Não</option>
-            </select>
-          </label>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 block text-xs font-black uppercase text-white/45">Vermelhos casa</span>
-              <input
-                className="input w-full"
-                disabled={loading || saving}
-                inputMode="numeric"
-                min={0}
-                onChange={(event) => setForm((current) => ({ ...current, redCardsHome: event.target.value }))}
-                step={1}
-                type="number"
-                value={form.redCardsHome}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-black uppercase text-white/45">Vermelhos visitante</span>
-              <input
-                className="input w-full"
-                disabled={loading || saving}
-                inputMode="numeric"
-                min={0}
-                onChange={(event) => setForm((current) => ({ ...current, redCardsAway: event.target.value }))}
-                step={1}
-                type="number"
-                value={form.redCardsAway}
-              />
-            </label>
-          </div>
         </div>
 
         <div className="mt-6 grid gap-2 sm:grid-cols-2">

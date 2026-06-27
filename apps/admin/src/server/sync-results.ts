@@ -25,12 +25,8 @@ type MatchRow = {
   away_score: number;
   first_goal_scorer?: string | null;
   first_goal_scorer_id?: string | null;
-  first_goal_no_goals?: boolean | null;
   man_of_match?: string | null;
   man_of_match_id?: string | null;
-  red_card_happened?: boolean | null;
-  red_cards_home?: number | null;
-  red_cards_away?: number | null;
   start_time: string;
   prediction_open_at?: string | null;
   prediction_close_at?: string | null;
@@ -54,11 +50,9 @@ type PredictionRow = {
   predicted_winner?: PredictionWinner | null;
   predicted_first_scorer?: string | null;
   predicted_first_scorer_id?: string | null;
-  predicted_first_goal_no_goals?: boolean | null;
   predicted_both_teams_score?: boolean | null;
   predicted_man_of_match?: string | null;
   predicted_man_of_match_id?: string | null;
-  predicted_red_card?: boolean | null;
   locked?: boolean;
   points: number;
 };
@@ -295,39 +289,23 @@ const groupPredictionsByMatch = (predictions: PredictionRow[]) => {
 const predictionPointsFor = (match: MatchRow, prediction: PredictionRow) => {
   const homeScore = Number(match.home_score ?? 0);
   const awayScore = Number(match.away_score ?? 0);
-  const isNoGoalMatch = homeScore === 0 && awayScore === 0;
-
-  const redCardCount = Number(match.red_cards_home ?? 0) + Number(match.red_cards_away ?? 0);
-
-  const officialRedCard =
-    redCardCount > 0
-      ? true
-      : match.red_card_happened !== null && match.red_card_happened !== undefined
-        ? match.red_card_happened
-        : undefined;
 
   return calculatePredictionPoints(
     {
       awayScore,
-      firstGoalNoGoals: isNoGoalMatch ? true : false,
-      firstScorer: isNoGoalMatch ? null : match.first_goal_scorer,
-      firstScorerId: isNoGoalMatch ? null : match.first_goal_scorer_id,
+      firstScorer: match.first_goal_scorer,
+      firstScorerId: match.first_goal_scorer_id,
       homeScore,
       manOfMatch: match.man_of_match,
       manOfMatchId: match.man_of_match_id,
-      redCard: officialRedCard,
     },
     {
       awayScore: Number(prediction.predicted_away_score ?? 0),
-      bothTeamsScore: prediction.predicted_both_teams_score,
-      firstGoalNoGoals: prediction.predicted_first_goal_no_goals,
       firstScorer: prediction.predicted_first_scorer,
       firstScorerId: prediction.predicted_first_scorer_id,
       homeScore: Number(prediction.predicted_home_score ?? 0),
       manOfMatch: prediction.predicted_man_of_match,
       manOfMatchId: prediction.predicted_man_of_match_id,
-      redCard: prediction.predicted_red_card,
-      winner: prediction.predicted_winner,
     },
   );
 };
@@ -339,8 +317,6 @@ const outcomeForScore = (homeScore: number, awayScore: number): PredictionWinner
 };
 
 const predictionOutcomeFor = (prediction: PredictionRow): PredictionWinner => {
-  if (prediction.predicted_winner) return prediction.predicted_winner;
-
   return outcomeForScore(
     Number(prediction.predicted_home_score ?? 0),
     Number(prediction.predicted_away_score ?? 0),

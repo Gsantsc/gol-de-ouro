@@ -194,6 +194,12 @@ const outcomeFromScore = (homeScore: number, awayScore: number): PredictionWinne
   return "draw";
 };
 
+const automaticOutcomeLabel = (winner: PredictionWinner, match: Match) => {
+  if (winner === "home") return `Vitória do mandante (${getTeamDisplayName(match.home_team)})`;
+  if (winner === "away") return `Vitória do visitante (${getTeamDisplayName(match.away_team)})`;
+  return "Empate";
+};
+
 const normalizePredictionScore = (value: string) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return PREDICTION_SCORE_MIN;
@@ -202,15 +208,11 @@ const normalizePredictionScore = (value: string) => {
 
 type PredictionSubmitPayload = {
   awayScore: number;
-  bothTeamsScore: boolean;
   firstScorer: string | null;
   firstScorerId: string | null;
-  firstGoalNoGoals: boolean;
   homeScore: number;
   manOfMatch: string | null;
   manOfMatchId: string | null;
-  redCard: boolean;
-  winner: PredictionWinner;
 };
 
 export default function UserDashboardPage() {
@@ -1296,22 +1298,27 @@ const PredictionSection = ({
               <p className="mt-1 text-xs text-white/45">
                 Enviado: {formatDateTimePtBr(prediction.submitted_at)}
               </p>
-              <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-5">
-                <PredictionDetail label="Vencedor" value={winnerLabel(prediction.predicted_winner, match)} />
+              <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                <PredictionDetail
+                  label="Resultado"
+                  value={winnerLabel(outcomeFromScore(Number(prediction.predicted_home_score ?? 0), Number(prediction.predicted_away_score ?? 0)), match)}
+                />
                 <PredictionDetail
                   label="Primeiro gol"
                   value={
-                    prediction.predicted_first_goal_no_goals
-                      ? "Sem gols"
+                    match?.status === "encerrado" && Number(match.home_score ?? 0) === 0 && Number(match.away_score ?? 0) === 0
+                      ? "Não se aplica"
                       : playerById.get(prediction.predicted_first_scorer_id ?? "")?.name ?? marketText(prediction.predicted_first_scorer)
                   }
                 />
-                <PredictionDetail label="Ambos marcam" value={boolLabel(prediction.predicted_both_teams_score)} />
+                <PredictionDetail
+                  label="Ambos marcam"
+                  value={boolLabel(Number(prediction.predicted_home_score ?? 0) > 0 && Number(prediction.predicted_away_score ?? 0) > 0)}
+                />
                 <PredictionDetail
                   label="Homem do jogo"
                   value={playerById.get(prediction.predicted_man_of_match_id ?? "")?.name ?? marketText(prediction.predicted_man_of_match)}
                 />
-                <PredictionDetail label="Cartão vermelho" value={boolLabel(prediction.predicted_red_card)} />
               </div>
             </div>
             <div className="rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-center">
@@ -1751,22 +1758,26 @@ const PredictionDialog = ({
   onSubmit: (payload: PredictionSubmitPayload) => Promise<void>;
 }) => {
   const [awayScore, setAwayScore] = useState(String(prediction?.predicted_away_score ?? 0));
-  const [bothTeamsScore, setBothTeamsScore] = useState<boolean>(prediction?.predicted_both_teams_score ?? false);
   const [homeScore, setHomeScore] = useState(String(prediction?.predicted_home_score ?? 0));
   const [firstScorerId, setFirstScorerId] = useState<string | null>(prediction?.predicted_first_scorer_id ?? null);
-  const [firstGoalNoGoals, setFirstGoalNoGoals] = useState<boolean>(prediction?.predicted_first_goal_no_goals ?? false);
   const [manOfMatchId, setManOfMatchId] = useState<string | null>(prediction?.predicted_man_of_match_id ?? null);
-  const [redCard, setRedCard] = useState<boolean>(prediction?.predicted_red_card ?? false);
-  const [winner, setWinner] = useState<PredictionWinner>(
-    prediction?.predicted_winner ?? outcomeFromScore(prediction?.predicted_home_score ?? 0, prediction?.predicted_away_score ?? 0),
-  );
   const parsedHomeScore = normalizePredictionScore(homeScore);
   const parsedAwayScore = normalizePredictionScore(awayScore);
   const predictionAccess = canSubmitPrediction(match, null, new Date(), predictionLockMinutes);
-  const firstScorerLabel = firstGoalNoGoals
-    ? "Sem gols"
+  const automaticWinner = outcomeFromScore(parsedHomeScore, parsedAwayScore);
+  const automaticBothTeamsScore = parsedHomeScore > 0 && parsedAwayScore > 0;
+  const automaticWinnerLabel = automaticOutcomeLabel(automaticWinner, match);
+  const firstScorerDisabled = parsedHomeScore === 0 && parsedAwayScore === 0;
+  const firstScorerLabel = firstScorerDisabled
+    ? "Não se aplica para 0x0"
     : players.find((player) => player.id === firstScorerId)?.name ?? "Não selecionado";
   const manOfMatchLabel = players.find((player) => player.id === manOfMatchId)?.name ?? "Não selecionado";
+
+  useEffect(() => {
+    if (firstScorerDisabled && firstScorerId) {
+      setFirstScorerId(null);
+    }
+  }, [firstScorerDisabled, firstScorerId]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-6">
@@ -1777,15 +1788,11 @@ const PredictionDialog = ({
           if (!predictionAccess.allowed) return;
           onSubmit({
             awayScore: parsedAwayScore,
-            bothTeamsScore,
             firstScorer: null,
-            firstScorerId,
-            firstGoalNoGoals,
+            firstScorerId: firstScorerDisabled ? null : firstScorerId,
             homeScore: parsedHomeScore,
             manOfMatch: null,
             manOfMatchId,
-            redCard,
-            winner,
           }).catch(console.error);
         }}
       >
@@ -1823,58 +1830,36 @@ const PredictionDialog = ({
           </label>
         </div>
 
-        <div className="mt-5">
-          <p className="text-sm font-black text-white/70">Vencedor</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            {([
-              ["home", getTeamDisplayName(match.home_team)],
-              ["draw", "Empate"],
-              ["away", getTeamDisplayName(match.away_team)],
-            ] as Array<[PredictionWinner, string]>).map(([value, label]) => (
-              <button
-                className={`segmented-chip ${winner === value ? "segmented-chip-active" : "segmented-chip-idle"}`}
-                key={value}
-                onClick={() => setWinner(value)}
-                type="button"
-              >
-                {label}
-              </button>
-            ))}
+        <div className="mt-5 rounded-md border border-gold/20 bg-gold/10 p-3">
+          <p className="text-sm font-black text-white/70">Resultado do seu palpite</p>
+          <div className="mt-2 text-sm font-black text-white">
+            {automaticWinnerLabel}
           </div>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <PlayerPicker
-            label="Primeiro jogador a marcar"
-            match={match}
-            noGoals={firstGoalNoGoals}
-            onChange={({ noGoals, player }) => {
-              setFirstGoalNoGoals(Boolean(noGoals));
-              setFirstScorerId(player?.id ?? null);
-            }}
-            players={players}
-            selectedPlayerId={firstScorerId}
-            showNoGoals
-          />
+          {firstScorerDisabled ? (
+            <div className="min-w-0">
+              <p className="mb-1 text-sm font-black text-white/70">Primeiro jogador a marcar</p>
+              <div className="input flex min-h-12 w-full items-center text-white/45">
+                Não se aplica para 0x0
+              </div>
+            </div>
+          ) : (
+            <PlayerPicker
+              label="Primeiro jogador a marcar"
+              match={match}
+              onChange={({ player }) => setFirstScorerId(player?.id ?? null)}
+              players={players}
+              selectedPlayerId={firstScorerId}
+            />
+          )}
           <PlayerPicker
             label="Homem do jogo"
             match={match}
             onChange={({ player }) => setManOfMatchId(player?.id ?? null)}
             players={players}
             selectedPlayerId={manOfMatchId}
-          />
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <ToggleChoice
-            label="Ambos marcam"
-            onChange={setBothTeamsScore}
-            value={bothTeamsScore}
-          />
-          <ToggleChoice
-            label="Cartão vermelho"
-            onChange={setRedCard}
-            value={redCard}
           />
         </div>
 
@@ -1887,11 +1872,10 @@ const PredictionDialog = ({
           <p className="text-xs font-black uppercase text-gold">Resumo do palpite</p>
           <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
             <PredictionDetail label="Placar" value={`${parsedHomeScore} x ${parsedAwayScore}`} />
-            <PredictionDetail label="Vencedor" value={winnerLabel(winner, match)} />
+            <PredictionDetail label="Resultado" value={automaticWinnerLabel} />
             <PredictionDetail label="Primeiro jogador" value={firstScorerLabel} />
             <PredictionDetail label="Homem do jogo" value={manOfMatchLabel} />
-            <PredictionDetail label="Ambos marcam" value={boolLabel(bothTeamsScore)} />
-            <PredictionDetail label="Cartão vermelho" value={boolLabel(redCard)} />
+            <PredictionDetail label="Ambos marcam" value={boolLabel(automaticBothTeamsScore)} />
           </div>
         </div>
         <div className="mt-6 flex gap-2">
@@ -1904,36 +1888,6 @@ const PredictionDialog = ({
     </div>
   );
 };
-
-const ToggleChoice = ({
-  label,
-  onChange,
-  value
-}: {
-  label: string;
-  onChange: (value: boolean) => void;
-  value: boolean;
-}) => (
-  <div>
-    <p className="text-sm font-black text-white/70">{label}</p>
-    <div className="mt-2 grid grid-cols-2 gap-2">
-      <button
-        className={`segmented-chip ${value ? "segmented-chip-active" : "segmented-chip-idle"}`}
-        onClick={() => onChange(true)}
-        type="button"
-      >
-        Sim
-      </button>
-      <button
-        className={`segmented-chip ${!value ? "segmented-chip-active" : "segmented-chip-idle"}`}
-        onClick={() => onChange(false)}
-        type="button"
-      >
-        Não
-      </button>
-    </div>
-  </div>
-);
 
 const SectionHeading = ({ title }: { title: string }) => (
   <h2 className="text-xl font-black text-white">{title}</h2>

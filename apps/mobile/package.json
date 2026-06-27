@@ -25,6 +25,7 @@
     "expo": "~55.0.0",
     "expo-constants": "~55.0.16",
     "expo-linear-gradient": "~55.0.14",
+    "expo-updates": "~55.0.25",
     "lucide-react-native": "^1.16.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",

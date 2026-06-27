@@ -32,6 +32,13 @@ export default {
     slug: "gol-de-ouro",
     scheme: "goldeouro",
     version: "0.1.0",
+
+updates: {
+  url: 'https://u.expo.dev/a8c8cf09-d06c-4823-a2a6-c0b4c2d75196',
+},
+runtimeVersion: {
+  policy: 'appVersion',
+},
     icon: "./public/icons/icon-512.png",
     orientation: "portrait",
     userInterfaceStyle: "dark",

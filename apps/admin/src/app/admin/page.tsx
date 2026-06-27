@@ -160,13 +160,22 @@ type MatchDensity = "comfortable" | "compact";
 type OfficialRosterPlayer = {
   active: boolean;
   id: string;
+  is_reserve?: boolean | null;
   name: string;
   position?: string | null;
+  position_group?: string | null;
   roster?: {
     championship?: string | null;
     is_official: boolean;
+    is_reserve?: boolean | null;
+    position?: string | null;
+    position_group?: string | null;
+    roster_order?: number | null;
+    shirt_number?: number | null;
     source?: string | null;
   };
+  roster_order?: number | null;
+  shirt_number?: number | null;
   team_code?: string | null;
   team_name?: string | null;
 };
@@ -215,6 +224,65 @@ const adminStatusClass: Record<MatchStatus, string> = {
 const OFFICIAL_EXTRAS_EMPTY_VALUE = "__empty__";
 const OFFICIAL_EXTRAS_SAVED_MESSAGE =
   "Extras oficiais salvos. Rode Recalcular pontuação desde o início para atualizar os pontos.";
+const OFFICIAL_ROSTER_POSITION_ORDER = ["GOL", "DEF", "MEI", "ATA", "OUT", "RS"] as const;
+
+type OfficialRosterPositionGroup = (typeof OFFICIAL_ROSTER_POSITION_ORDER)[number];
+
+const OFFICIAL_ROSTER_POSITION_LABELS: Record<OfficialRosterPositionGroup, string> = {
+  ATA: "ATA",
+  DEF: "DEF",
+  GOL: "GOL",
+  MEI: "MEI",
+  OUT: "Sem posicao",
+  RS: "RS",
+};
+
+const normalizeOfficialRosterPositionGroup = (value?: string | null): OfficialRosterPositionGroup | null => {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (normalized === "GOL" || normalized === "DEF" || normalized === "MEI" || normalized === "ATA" || normalized === "RS") {
+    return normalized;
+  }
+
+  return null;
+};
+
+const isOfficialReservePlayer = (player: OfficialRosterPlayer) =>
+  Boolean(player.is_reserve || player.roster?.is_reserve)
+  || normalizeOfficialRosterPositionGroup(player.position_group ?? player.roster?.position_group) === "RS";
+
+const officialPositionGroupFor = (player: OfficialRosterPlayer): OfficialRosterPositionGroup => {
+  if (isOfficialReservePlayer(player)) return "RS";
+  return normalizeOfficialRosterPositionGroup(player.position_group ?? player.roster?.position_group) ?? "OUT";
+};
+
+const compareOfficialRosterPlayers = (left: OfficialRosterPlayer, right: OfficialRosterPlayer) => {
+  const leftOrder = left.roster_order ?? left.roster?.roster_order ?? Number.MAX_SAFE_INTEGER;
+  const rightOrder = right.roster_order ?? right.roster?.roster_order ?? Number.MAX_SAFE_INTEGER;
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+
+  const leftNumber = left.shirt_number ?? left.roster?.shirt_number ?? Number.MAX_SAFE_INTEGER;
+  const rightNumber = right.shirt_number ?? right.roster?.shirt_number ?? Number.MAX_SAFE_INTEGER;
+  if (leftNumber !== rightNumber) return leftNumber - rightNumber;
+
+  return left.name.localeCompare(right.name, "pt-BR");
+};
+
+const groupOfficialPlayersByPosition = (players: OfficialRosterPlayer[]) =>
+  OFFICIAL_ROSTER_POSITION_ORDER.map((group) => ({
+    group,
+    label: OFFICIAL_ROSTER_POSITION_LABELS[group],
+    players: players
+      .filter((player) => officialPositionGroupFor(player) === group)
+      .sort(compareOfficialRosterPlayers),
+  })).filter((group) => group.players.length > 0);
+
+const officialRosterOptionLabel = (player: OfficialRosterPlayer) => {
+  const reserveLabel = isOfficialReservePlayer(player) ? "[RS] " : "";
+  const shirtNumber = player.shirt_number ?? player.roster?.shirt_number;
+  const position = player.position ?? player.roster?.position;
+  const meta = [position, shirtNumber ? `#${shirtNumber}` : null].filter(Boolean).join(" - ");
+  return `${reserveLabel}${player.name}${meta ? ` - ${meta}` : ""}`;
+};
 
 const fetchAdminJson = async <Result,>(path: string, init: RequestInit = {}) => {
   const { data, error } = await supabase.auth.getSession();
@@ -1865,15 +1933,22 @@ const OfficialExtrasModal = ({
   }, [match.id]);
 
   const officialPlayerGroups = useMemo(() => {
-    if (!playersResponse) return [] as Array<{ label: string; players: OfficialRosterPlayer[] }>;
+    if (!playersResponse) {
+      return [] as Array<{
+        label: string;
+        positionGroups: ReturnType<typeof groupOfficialPlayersByPosition>;
+      }>;
+    }
 
     return [
-      { label: playersResponse.homeTeam.name, players: playersResponse.homeTeam.players },
-      { label: playersResponse.awayTeam.name, players: playersResponse.awayTeam.players },
+      { label: playersResponse.homeTeam.name, positionGroups: groupOfficialPlayersByPosition(playersResponse.homeTeam.players) },
+      { label: playersResponse.awayTeam.name, positionGroups: groupOfficialPlayersByPosition(playersResponse.awayTeam.players) },
     ];
   }, [playersResponse]);
   const officialPlayerIds = useMemo(
-    () => new Set(officialPlayerGroups.flatMap((group) => group.players.map((player) => player.id))),
+    () => new Set(officialPlayerGroups.flatMap((group) =>
+      group.positionGroups.flatMap((positionGroup) => positionGroup.players.map((player) => player.id))
+    )),
     [officialPlayerGroups],
   );
   const hasOfficialPlayers = officialPlayerIds.size > 0;
@@ -2020,13 +2095,15 @@ const OfficialExtrasModal = ({
             >
               <option value={OFFICIAL_EXTRAS_EMPTY_VALUE}>Não informado</option>
               {!blockPlayerOptions && officialPlayerGroups.map((group) => (
-                <optgroup key={group.label} label={group.label}>
-                  {group.players.map((player) => (
-                    <option key={player.id} value={player.id}>
-                      {player.name}{player.position ? ` - ${player.position}` : ""}
-                    </option>
-                  ))}
-                </optgroup>
+                group.positionGroups.map((positionGroup) => (
+                  <optgroup key={`${group.label}-${positionGroup.group}`} label={`${group.label} - ${positionGroup.label}`}>
+                    {positionGroup.players.map((player) => (
+                      <option key={player.id} value={player.id}>
+                        {officialRosterOptionLabel(player)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
               ))}
             </select>
           </label>
@@ -2041,13 +2118,15 @@ const OfficialExtrasModal = ({
             >
               <option value={OFFICIAL_EXTRAS_EMPTY_VALUE}>Não informado</option>
               {!blockPlayerOptions && officialPlayerGroups.map((group) => (
-                <optgroup key={group.label} label={group.label}>
-                  {group.players.map((player) => (
-                    <option key={player.id} value={player.id}>
-                      {player.name}{player.position ? ` - ${player.position}` : ""}
-                    </option>
-                  ))}
-                </optgroup>
+                group.positionGroups.map((positionGroup) => (
+                  <optgroup key={`${group.label}-${positionGroup.group}`} label={`${group.label} - ${positionGroup.label}`}>
+                    {positionGroup.players.map((player) => (
+                      <option key={player.id} value={player.id}>
+                        {officialRosterOptionLabel(player)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
               ))}
             </select>
           </label>

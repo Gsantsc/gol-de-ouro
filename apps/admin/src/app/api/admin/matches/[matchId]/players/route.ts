@@ -26,7 +26,12 @@ type PlayerRow = {
 type CompetitionRosterRow = {
   championship: string;
   is_official: boolean;
+  is_reserve?: boolean | null;
   player_id: string;
+  position?: string | null;
+  position_group?: string | null;
+  roster_order?: number | null;
+  shirt_number?: number | null;
   source?: string | null;
   team_code?: string | null;
   team_name?: string | null;
@@ -37,11 +42,19 @@ type RouteContext = {
 };
 
 const PLAYER_SELECT = "id,name,team_code,team_name,position,active,deleted_at";
-const ROSTER_SELECT = "championship,player_id,team_code,team_name,is_official,source";
+const ROSTER_SELECT =
+  "championship,player_id,team_code,team_name,is_official,source,position_group,position,shirt_number,is_reserve,roster_order";
 const MATCH_SELECT_WITH_CODES = "id,home_team,away_team,home_team_code,away_team_code,championship,status";
 const MATCH_SELECT_BASE = "id,home_team,away_team,championship,status";
 const NO_REGISTERED_ROSTER_WARNING =
   "Nenhum elenco oficial cadastrado para esta competicao. Cadastre o roster antes de preencher extras oficiais.";
+const POSITION_ORDER = new Map([
+  ["GOL", 0],
+  ["DEF", 1],
+  ["MEI", 2],
+  ["ATA", 3],
+  ["RS", 4],
+]);
 
 const requiredEnv = (name: string) => {
   const value = process.env[name];
@@ -196,22 +209,58 @@ const belongsToTeam = (
   return identifiers.some((identifier) => teamIdentifiers.includes(identifier));
 };
 
+const normalizePositionGroup = (value?: string | null) => {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  return normalized || null;
+};
+
+const isReserveRoster = (roster: CompetitionRosterRow) =>
+  Boolean(roster.is_reserve) || normalizePositionGroup(roster.position_group) === "RS";
+
+const rosterPositionRank = (roster: CompetitionRosterRow) => {
+  if (isReserveRoster(roster)) return POSITION_ORDER.get("RS") ?? 4;
+  return POSITION_ORDER.get(normalizePositionGroup(roster.position_group) ?? "") ?? 99;
+};
+
 const toResponsePlayer = (player: PlayerRow, roster: CompetitionRosterRow) => ({
   active: player.active,
   id: player.id,
   name: player.name,
-  position: player.position ?? null,
+  is_reserve: isReserveRoster(roster),
+  position: roster.position ?? player.position ?? null,
+  position_group: normalizePositionGroup(roster.position_group),
   roster: {
     championship: roster.championship,
     is_official: roster.is_official,
+    is_reserve: isReserveRoster(roster),
+    position: roster.position ?? player.position ?? null,
+    position_group: normalizePositionGroup(roster.position_group),
+    roster_order: roster.roster_order ?? null,
+    shirt_number: roster.shirt_number ?? null,
     source: roster.source ?? null,
   },
-  team_code: player.team_code ?? null,
-  team_name: player.team_name,
+  roster_order: roster.roster_order ?? null,
+  shirt_number: roster.shirt_number ?? null,
+  team_code: roster.team_code ?? player.team_code ?? null,
+  team_name: roster.team_name ?? player.team_name,
 });
 
-const sortByName = (players: Array<{ player: PlayerRow; roster: CompetitionRosterRow }>) =>
-  [...players].sort((first, second) => first.player.name.localeCompare(second.player.name, "pt-BR"));
+const sortRosterPlayers = (players: Array<{ player: PlayerRow; roster: CompetitionRosterRow }>) =>
+  [...players].sort((first, second) => {
+    const firstReserve = isReserveRoster(first.roster) ? 1 : 0;
+    const secondReserve = isReserveRoster(second.roster) ? 1 : 0;
+    if (firstReserve !== secondReserve) return firstReserve - secondReserve;
+
+    const firstPosition = rosterPositionRank(first.roster);
+    const secondPosition = rosterPositionRank(second.roster);
+    if (firstPosition !== secondPosition) return firstPosition - secondPosition;
+
+    const firstOrder = first.roster.roster_order ?? Number.MAX_SAFE_INTEGER;
+    const secondOrder = second.roster.roster_order ?? Number.MAX_SAFE_INTEGER;
+    if (firstOrder !== secondOrder) return firstOrder - secondOrder;
+
+    return first.player.name.localeCompare(second.player.name, "pt-BR");
+  });
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
@@ -284,10 +333,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
       const roster = rosterByPlayerId.get(player.id);
       return roster ? [{ player, roster }] : [];
     });
-    const homePlayers = sortByName(
+    const homePlayers = sortRosterPlayers(
       officialPlayers.filter(({ player, roster }) => belongsToTeam(player, roster, homeIdentifiers)),
     );
-    const awayPlayers = sortByName(
+    const awayPlayers = sortRosterPlayers(
       officialPlayers.filter(({ player, roster }) => belongsToTeam(player, roster, awayIdentifiers)),
     );
 

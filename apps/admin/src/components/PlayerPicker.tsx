@@ -5,6 +5,8 @@ import { Search, UserRound, X } from "lucide-react";
 import type { Match, Player } from "@gol-de-ouro/shared";
 import { formatMatchupDisplayName, getTeamDisplayName, normalizeTeamNameWithAliases } from "@gol-de-ouro/shared";
 
+type PositionGroupKey = "GOL" | "DEF" | "MEI" | "ATA" | "RS" | "OUT";
+
 type PlayerPickerProps = {
   disabled?: boolean;
   label: string;
@@ -12,6 +14,17 @@ type PlayerPickerProps = {
   onChange: (value: { player: Player | null }) => void;
   players: Player[];
   selectedPlayerId?: string | null;
+};
+
+const POSITION_GROUP_ORDER: PositionGroupKey[] = ["GOL", "DEF", "MEI", "ATA", "OUT", "RS"];
+
+const POSITION_GROUP_LABELS: Record<PositionGroupKey, string> = {
+  ATA: "ATA",
+  DEF: "DEF",
+  GOL: "GOL",
+  MEI: "MEI",
+  OUT: "Sem posicao",
+  RS: "RS"
 };
 
 const normalize = (value: string) =>
@@ -23,12 +36,68 @@ const normalize = (value: string) =>
 const matchTeam = (player: Player, teamName: string) =>
   normalizeTeamNameWithAliases(player.team_name) === normalizeTeamNameWithAliases(teamName);
 
+const normalizePositionGroup = (value?: string | null): PositionGroupKey | null => {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (normalized === "GOL" || normalized === "DEF" || normalized === "MEI" || normalized === "ATA" || normalized === "RS") {
+    return normalized;
+  }
+
+  return null;
+};
+
+const inferPositionGroup = (position?: string | null): PositionGroupKey | null => {
+  const normalized = normalize(position ?? "");
+  if (!normalized) return null;
+  if (/(goleir|goalkeeper|\bgk\b)/i.test(normalized)) return "GOL";
+  if (/(zagueir|lateral|defensor|defender|defesa|back)/i.test(normalized)) return "DEF";
+  if (/(meia|meio|volante|midfield|midfielder)/i.test(normalized)) return "MEI";
+  if (/(atacante|ponta|forward|striker|winger|ataque)/i.test(normalized)) return "ATA";
+  if (/(reserva|reserve|\brs\b)/i.test(normalized)) return "RS";
+  return null;
+};
+
+const isReservePlayer = (player: Player) =>
+  Boolean(player.is_reserve) || normalizePositionGroup(player.position_group) === "RS";
+
+const positionGroupFor = (player: Player): PositionGroupKey => {
+  if (isReservePlayer(player)) return "RS";
+  return normalizePositionGroup(player.position_group) ?? inferPositionGroup(player.position) ?? "OUT";
+};
+
+const comparePlayers = (left: Player, right: Player) => {
+  const leftReserve = isReservePlayer(left) ? 1 : 0;
+  const rightReserve = isReservePlayer(right) ? 1 : 0;
+  if (leftReserve !== rightReserve) return leftReserve - rightReserve;
+
+  const leftOrder = left.roster_order ?? Number.MAX_SAFE_INTEGER;
+  const rightOrder = right.roster_order ?? Number.MAX_SAFE_INTEGER;
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+
+  const leftNumber = left.shirt_number ?? Number.MAX_SAFE_INTEGER;
+  const rightNumber = right.shirt_number ?? Number.MAX_SAFE_INTEGER;
+  if (leftNumber !== rightNumber) return leftNumber - rightNumber;
+
+  return left.name.localeCompare(right.name, "pt-BR");
+};
+
+const groupByPosition = (players: Player[]) =>
+  POSITION_GROUP_ORDER.map((group) => ({
+    group,
+    label: POSITION_GROUP_LABELS[group],
+    players: players
+      .filter((player) => positionGroupFor(player) === group)
+      .sort(comparePlayers)
+  })).filter((group) => group.players.length > 0);
+
 const playerLabel = (player?: Player | null) => {
   if (!player) return "Selecionar jogador";
-  return [player.shirt_number ? `#${player.shirt_number}` : null, player.name]
+  return [isReservePlayer(player) ? "[RS]" : null, player.shirt_number ? `#${player.shirt_number}` : null, player.name]
     .filter(Boolean)
     .join(" ");
 };
+
+const playerMeta = (player: Player) =>
+  [player.position, player.shirt_number ? `#${player.shirt_number}` : null].filter(Boolean).join(" - ") || "Elenco";
 
 export const PlayerPicker = ({
   disabled = false,
@@ -45,12 +114,11 @@ export const PlayerPicker = ({
     const filtered = (teamName: string) =>
       players
         .filter((player) => player.active && matchTeam(player, teamName))
-        .filter((player) => normalize(`${player.name} ${player.position ?? ""}`).includes(normalize(query)))
-        .sort((left, right) => left.name.localeCompare(right.name));
+        .filter((player) => normalize(`${player.name} ${player.position ?? ""} ${player.position_group ?? ""}`).includes(normalize(query)));
 
     return [
-      { name: match.home_team, players: filtered(match.home_team) },
-      { name: match.away_team, players: filtered(match.away_team) }
+      { name: match.home_team, positionGroups: groupByPosition(filtered(match.home_team)) },
+      { name: match.away_team, positionGroups: groupByPosition(filtered(match.away_team)) }
     ];
   }, [match.away_team, match.home_team, players, query]);
 
@@ -102,29 +170,40 @@ export const PlayerPicker = ({
                 {groups.map((group) => (
                   <section key={group.name}>
                     <p className="mb-2 text-xs font-black uppercase text-gold">{getTeamDisplayName(group.name)}</p>
-                    {group.players.length ? (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {group.players.map((player) => {
-                          const active = player.id === selectedPlayerId;
-                          return (
-                            <button
-                              className={`rounded-md border px-3 py-3 text-left transition ${
-                                active ? "border-gold bg-gold text-black" : "border-pitch-600 bg-pitch-950/35 text-white hover:border-gold/45"
-                              }`}
-                              key={player.id}
-                              onClick={() => {
-                                onChange({ player });
-                                setOpen(false);
-                              }}
-                              type="button"
-                            >
-                              <span className="block font-black">{player.name}</span>
-                              <span className="mt-1 block text-xs font-bold opacity-65">
-                                {[player.position, player.shirt_number ? `#${player.shirt_number}` : null].filter(Boolean).join(" · ") || "Elenco"}
-                              </span>
-                            </button>
-                          );
-                        })}
+                    {group.positionGroups.length ? (
+                      <div className="space-y-3">
+                        {group.positionGroups.map((positionGroup) => (
+                          <div key={`${group.name}-${positionGroup.group}`}>
+                            <p className="mb-2 text-[11px] font-black uppercase text-white/45">{positionGroup.label}</p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {positionGroup.players.map((player) => {
+                                const active = player.id === selectedPlayerId;
+                                const reserve = isReservePlayer(player);
+                                return (
+                                  <button
+                                    className={`rounded-md border px-3 py-3 text-left transition ${
+                                      active ? "border-gold bg-gold text-black" : "border-pitch-600 bg-pitch-950/35 text-white hover:border-gold/45"
+                                    }`}
+                                    key={player.id}
+                                    onClick={() => {
+                                      onChange({ player });
+                                      setOpen(false);
+                                    }}
+                                    type="button"
+                                  >
+                                    <span className="block font-black">
+                                      {reserve ? <span className="mr-1 text-xs font-black opacity-70">[RS]</span> : null}
+                                      {player.name}
+                                    </span>
+                                    <span className="mt-1 block text-xs font-bold opacity-65">
+                                      {playerMeta(player)}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     ) : (
                       <p className="rounded-md border border-dashed border-pitch-600 px-3 py-3 text-sm font-bold text-white/45">

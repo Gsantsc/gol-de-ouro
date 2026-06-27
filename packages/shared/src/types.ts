@@ -31,7 +31,10 @@ export type Player = {
   team_code: string;
   team_name: string;
   position?: string | null;
+  position_group?: string | null;
   shirt_number?: number | null;
+  is_reserve?: boolean | null;
+  roster_order?: number | null;
   active: boolean;
   source?: string | null;
   source_updated_at?: string | null;

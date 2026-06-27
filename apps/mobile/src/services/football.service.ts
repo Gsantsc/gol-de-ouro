@@ -190,11 +190,9 @@ export const submitPrediction = async ({
   winner,
   firstScorer: _firstScorer,
   firstScorerId,
-  firstGoalNoGoals,
   bothTeamsScore,
   manOfMatch: _manOfMatch,
-  manOfMatchId,
-  redCard
+  manOfMatchId
 }: {
   userId: string;
   matchId: string;
@@ -203,34 +201,32 @@ export const submitPrediction = async ({
   winner: PredictionWinner;
   firstScorer: string | null;
   firstScorerId: string | null;
-  firstGoalNoGoals: boolean;
   bothTeamsScore: boolean;
   manOfMatch: string | null;
   manOfMatchId: string | null;
-  redCard: boolean;
 }) => {
   const rpcPayload = {
     away_score_value: awayScore,
     both_teams_score_value: bothTeamsScore,
-    first_goal_no_goals_value: firstGoalNoGoals,
-    first_scorer_id_value: firstGoalNoGoals ? null : firstScorerId,
+    first_goal_no_goals_value: false,
+    first_scorer_id_value: firstScorerId,
     home_score_value: homeScore,
     man_of_match_id_value: manOfMatchId,
     predicted_winner_value: winner,
-    red_card_value: redCard,
+    red_card_value: false,
     target_match_id: matchId
   };
   const directPayload = {
     match_id: matchId,
     predicted_away_score: awayScore,
     predicted_both_teams_score: bothTeamsScore,
-    predicted_first_goal_no_goals: firstGoalNoGoals,
+    predicted_first_goal_no_goals: false,
     predicted_first_scorer: null,
-    predicted_first_scorer_id: firstGoalNoGoals ? null : firstScorerId,
+    predicted_first_scorer_id: firstScorerId,
     predicted_home_score: homeScore,
     predicted_man_of_match: null,
     predicted_man_of_match_id: manOfMatchId,
-    predicted_red_card: redCard,
+    predicted_red_card: false,
     predicted_winner: winner,
     user_id: userId
   };

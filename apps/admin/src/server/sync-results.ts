@@ -25,12 +25,8 @@ type MatchRow = {
   away_score: number;
   first_goal_scorer?: string | null;
   first_goal_scorer_id?: string | null;
-  first_goal_no_goals?: boolean | null;
   man_of_match?: string | null;
   man_of_match_id?: string | null;
-  red_card_happened?: boolean | null;
-  red_cards_home?: number | null;
-  red_cards_away?: number | null;
   start_time: string;
   prediction_open_at?: string | null;
   prediction_close_at?: string | null;
@@ -54,11 +50,9 @@ type PredictionRow = {
   predicted_winner?: PredictionWinner | null;
   predicted_first_scorer?: string | null;
   predicted_first_scorer_id?: string | null;
-  predicted_first_goal_no_goals?: boolean | null;
   predicted_both_teams_score?: boolean | null;
   predicted_man_of_match?: string | null;
   predicted_man_of_match_id?: string | null;
-  predicted_red_card?: boolean | null;
   locked?: boolean;
   points: number;
 };

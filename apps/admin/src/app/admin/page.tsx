@@ -152,11 +152,9 @@ const tournamentTypes: TournamentType[] = [
 
 type MatchDraft = {
   away_score: string;
-  first_goal_no_goals: boolean;
   first_goal_scorer_id: string | null;
   home_score: string;
   man_of_match_id: string | null;
-  red_card_happened: boolean;
 };
 type MatchDensity = "comfortable" | "compact";
 type OfficialRosterPlayer = {
@@ -1072,11 +1070,9 @@ const MatchesPanel = ({
           match.id,
           {
             away_score: String(match.away_score),
-            first_goal_no_goals: Boolean(match.first_goal_no_goals),
             first_goal_scorer_id: match.first_goal_scorer_id ?? null,
             home_score: String(match.home_score),
-            man_of_match_id: match.man_of_match_id ?? null,
-            red_card_happened: Boolean(match.red_card_happened ?? ((match.red_cards_home ?? 0) + (match.red_cards_away ?? 0) > 0))
+            man_of_match_id: match.man_of_match_id ?? null
           }
         ]),
       ),
@@ -1525,11 +1521,9 @@ const MatchesPanel = ({
                 {group.matches.map((match) => {
                   const draft = drafts[match.id] ?? {
                     away_score: String(match.away_score),
-                    first_goal_no_goals: Boolean(match.first_goal_no_goals),
                     first_goal_scorer_id: match.first_goal_scorer_id ?? null,
                     home_score: String(match.home_score),
-                    man_of_match_id: match.man_of_match_id ?? null,
-                    red_card_happened: Boolean(match.red_card_happened ?? ((match.red_cards_home ?? 0) + (match.red_cards_away ?? 0) > 0))
+                    man_of_match_id: match.man_of_match_id ?? null
                   };
 
                   return (
@@ -1728,7 +1722,6 @@ const AdminMatchCard = memo(function AdminMatchCard({
             onChange={({ player }) =>
               onDraftChange({
                 ...draft,
-                first_goal_no_goals: false,
                 first_goal_scorer_id: player?.id ?? null
               })
             }
@@ -1767,7 +1760,6 @@ const AdminMatchCard = memo(function AdminMatchCard({
               onAction(() =>
                 updateMatch(match.id, {
                   away_score: Number(draft.away_score),
-                  first_goal_no_goals: false,
                   first_goal_scorer: null,
                   first_goal_scorer_id: draft.first_goal_scorer_id,
                   home_score: Number(draft.home_score),
@@ -1803,7 +1795,6 @@ const AdminMatchCard = memo(function AdminMatchCard({
             const finished = await onAction(async () => {
               await updateMatch(match.id, {
                 away_score: Number(draft.away_score),
-                first_goal_no_goals: false,
                 first_goal_scorer: null,
                 first_goal_scorer_id: draft.first_goal_scorer_id,
                 home_score: Number(draft.home_score),
@@ -1941,7 +1932,6 @@ const OfficialExtrasModal = ({
       }
 
       const payload = {
-        first_goal_no_goals: false,
         first_goal_scorer_id: firstGoalPlayerId,
         man_of_match_id: manOfMatchId,
       };

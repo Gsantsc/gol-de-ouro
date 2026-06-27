@@ -356,7 +356,7 @@ export const PredictionCard = ({
 
         <Text style={[styles.breakdownSectionTitle, styles.breakdownSectionSpacing]}>Extras</Text>
         <BreakdownRow
-          label="Primeiro gol"
+          label="Primeiro jogador"
           pointsLabel={pointsTextFor(breakdown?.extras.firstScorer.points ?? 0, !scored)}
           status={firstScorerStatus}
           value={firstScorerValue({ breakdown, match, playerById, prediction, scored })}

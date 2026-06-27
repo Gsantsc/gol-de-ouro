@@ -9,7 +9,6 @@ const rows = [
   ["Escanteios", "corners_home", "corners_away", ""],
   ["Faltas", "fouls_home", "fouls_away", ""],
   ["Amarelos", "yellow_cards_home", "yellow_cards_away", ""],
-  ["Vermelhos", "red_cards_home", "red_cards_away", ""],
   ["xG", "xg_home", "xg_away", ""]
 ] as const;
 

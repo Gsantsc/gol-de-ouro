@@ -8,21 +8,17 @@ export type PredictionOutcome = "home" | "away" | "draw";
 export type OfficialPredictionMarkets = ScoreInput & {
   firstScorer?: string | null;
   firstScorerId?: string | null;
-  firstGoalNoGoals?: boolean | null;
   manOfMatch?: string | null;
   manOfMatchId?: string | null;
-  redCard?: boolean | null;
 };
 
 export type UserPredictionMarkets = ScoreInput & {
   winner?: PredictionOutcome | null;
   firstScorer?: string | null;
   firstScorerId?: string | null;
-  firstGoalNoGoals?: boolean | null;
   bothTeamsScore?: boolean | null;
   manOfMatch?: string | null;
   manOfMatchId?: string | null;
-  redCard?: boolean | null;
 };
 
 export type ScoringOptions = {

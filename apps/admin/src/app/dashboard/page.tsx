@@ -205,11 +205,9 @@ type PredictionSubmitPayload = {
   bothTeamsScore: boolean;
   firstScorer: string | null;
   firstScorerId: string | null;
-  firstGoalNoGoals: boolean;
   homeScore: number;
   manOfMatch: string | null;
   manOfMatchId: string | null;
-  redCard: boolean;
   winner: PredictionWinner;
 };
 
@@ -1296,13 +1294,13 @@ const PredictionSection = ({
               <p className="mt-1 text-xs text-white/45">
                 Enviado: {formatDateTimePtBr(prediction.submitted_at)}
               </p>
-              <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-5">
+              <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
                 <PredictionDetail label="Vencedor" value={winnerLabel(prediction.predicted_winner, match)} />
                 <PredictionDetail
                   label="Primeiro gol"
                   value={
-                    prediction.predicted_first_goal_no_goals
-                      ? "Sem gols"
+                    match?.status === "encerrado" && Number(match.home_score ?? 0) === 0 && Number(match.away_score ?? 0) === 0
+                      ? "Não se aplica"
                       : playerById.get(prediction.predicted_first_scorer_id ?? "")?.name ?? marketText(prediction.predicted_first_scorer)
                   }
                 />
@@ -1311,7 +1309,6 @@ const PredictionSection = ({
                   label="Homem do jogo"
                   value={playerById.get(prediction.predicted_man_of_match_id ?? "")?.name ?? marketText(prediction.predicted_man_of_match)}
                 />
-                <PredictionDetail label="Cartão vermelho" value={boolLabel(prediction.predicted_red_card)} />
               </div>
             </div>
             <div className="rounded-md border border-gold/30 bg-gold/10 px-4 py-2 text-center">
@@ -1754,19 +1751,24 @@ const PredictionDialog = ({
   const [bothTeamsScore, setBothTeamsScore] = useState<boolean>(prediction?.predicted_both_teams_score ?? false);
   const [homeScore, setHomeScore] = useState(String(prediction?.predicted_home_score ?? 0));
   const [firstScorerId, setFirstScorerId] = useState<string | null>(prediction?.predicted_first_scorer_id ?? null);
-  const [firstGoalNoGoals, setFirstGoalNoGoals] = useState<boolean>(prediction?.predicted_first_goal_no_goals ?? false);
   const [manOfMatchId, setManOfMatchId] = useState<string | null>(prediction?.predicted_man_of_match_id ?? null);
-  const [redCard, setRedCard] = useState<boolean>(prediction?.predicted_red_card ?? false);
   const [winner, setWinner] = useState<PredictionWinner>(
     prediction?.predicted_winner ?? outcomeFromScore(prediction?.predicted_home_score ?? 0, prediction?.predicted_away_score ?? 0),
   );
   const parsedHomeScore = normalizePredictionScore(homeScore);
   const parsedAwayScore = normalizePredictionScore(awayScore);
   const predictionAccess = canSubmitPrediction(match, null, new Date(), predictionLockMinutes);
-  const firstScorerLabel = firstGoalNoGoals
-    ? "Sem gols"
+  const firstScorerDisabled = parsedHomeScore === 0 && parsedAwayScore === 0;
+  const firstScorerLabel = firstScorerDisabled
+    ? "Não se aplica para 0x0"
     : players.find((player) => player.id === firstScorerId)?.name ?? "Não selecionado";
   const manOfMatchLabel = players.find((player) => player.id === manOfMatchId)?.name ?? "Não selecionado";
+
+  useEffect(() => {
+    if (firstScorerDisabled && firstScorerId) {
+      setFirstScorerId(null);
+    }
+  }, [firstScorerDisabled, firstScorerId]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-6">
@@ -1779,12 +1781,10 @@ const PredictionDialog = ({
             awayScore: parsedAwayScore,
             bothTeamsScore,
             firstScorer: null,
-            firstScorerId,
-            firstGoalNoGoals,
+            firstScorerId: firstScorerDisabled ? null : firstScorerId,
             homeScore: parsedHomeScore,
             manOfMatch: null,
             manOfMatchId,
-            redCard,
             winner,
           }).catch(console.error);
         }}
@@ -1844,18 +1844,22 @@ const PredictionDialog = ({
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <PlayerPicker
-            label="Primeiro jogador a marcar"
-            match={match}
-            noGoals={firstGoalNoGoals}
-            onChange={({ noGoals, player }) => {
-              setFirstGoalNoGoals(Boolean(noGoals));
-              setFirstScorerId(player?.id ?? null);
-            }}
-            players={players}
-            selectedPlayerId={firstScorerId}
-            showNoGoals
-          />
+          {firstScorerDisabled ? (
+            <div className="min-w-0">
+              <p className="mb-1 text-sm font-black text-white/70">Primeiro jogador a marcar</p>
+              <div className="input flex min-h-12 w-full items-center text-white/45">
+                Não se aplica para 0x0
+              </div>
+            </div>
+          ) : (
+            <PlayerPicker
+              label="Primeiro jogador a marcar"
+              match={match}
+              onChange={({ player }) => setFirstScorerId(player?.id ?? null)}
+              players={players}
+              selectedPlayerId={firstScorerId}
+            />
+          )}
           <PlayerPicker
             label="Homem do jogo"
             match={match}
@@ -1870,11 +1874,6 @@ const PredictionDialog = ({
             label="Ambos marcam"
             onChange={setBothTeamsScore}
             value={bothTeamsScore}
-          />
-          <ToggleChoice
-            label="Cartão vermelho"
-            onChange={setRedCard}
-            value={redCard}
           />
         </div>
 
@@ -1891,7 +1890,6 @@ const PredictionDialog = ({
             <PredictionDetail label="Primeiro jogador" value={firstScorerLabel} />
             <PredictionDetail label="Homem do jogo" value={manOfMatchLabel} />
             <PredictionDetail label="Ambos marcam" value={boolLabel(bothTeamsScore)} />
-            <PredictionDetail label="Cartão vermelho" value={boolLabel(redCard)} />
           </div>
         </div>
         <div className="mt-6 flex gap-2">

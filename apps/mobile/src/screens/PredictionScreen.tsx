@@ -124,11 +124,9 @@ export const PredictionScreen = ({
         winner,
         firstScorer: null,
         firstScorerId: firstScorerDisabled ? null : firstScorerId,
-        firstGoalNoGoals: false,
         bothTeamsScore,
         manOfMatch: null,
-        manOfMatchId,
-        redCard: false
+        manOfMatchId
       });
       setSubmitted(true);
       await onSubmitted();

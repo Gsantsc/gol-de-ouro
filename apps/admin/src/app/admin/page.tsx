@@ -1382,6 +1382,11 @@ const MatchesPanel = ({
 
           {lastRosterSyncSummary && (
             <div className="mt-4">
+              {lastRosterSyncSummary.summary.teamsChecked > 0 && lastRosterSyncSummary.summary.playersFetched === 0 && (
+                <div className="mb-3 rounded-md border border-gold/30 bg-gold/10 p-3 text-sm font-bold leading-6 text-gold">
+                  Times encontrados, mas nenhum elenco retornou do provider. A API-Football respondeu sem teamId/squad para estas seleções e o ESPN não retornou roster confiável.
+                </div>
+              )}
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
                 {rosterSummaryItems.map((item) => (
                   <div className="rounded-md border border-white/10 bg-white/[0.03] p-3" key={item.label}>

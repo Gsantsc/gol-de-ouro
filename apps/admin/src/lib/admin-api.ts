@@ -427,6 +427,21 @@ export type SyncRostersResponse = {
   championship: string;
   ok: boolean;
   summary: {
+    debug?: {
+      apiFootballStatus?: {
+        account?: unknown;
+        errors?: unknown;
+        httpStatus: number;
+        requests?: {
+          current?: number | null;
+          limit_day?: number | null;
+        } | null;
+        subscription?: {
+          active?: boolean | null;
+        } | null;
+      } | null;
+    };
+    globalWarnings?: string[];
     playersFetched: number;
     playersUpserted: number;
     rostersUpserted: number;

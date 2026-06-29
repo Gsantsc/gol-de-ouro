@@ -30,9 +30,13 @@ export type TeamNeedingRoster = {
 };
 
 export type RosterProviderDebug = {
+  errors?: unknown;
   httpStatus?: number;
+  paging?: unknown;
+  parameters?: unknown;
   playersCount?: number;
   responseCount?: number;
+  results?: number;
   selectedTeamId?: string | null;
   selectedTeamName?: string | null;
   teamCode?: string;
@@ -47,6 +51,7 @@ type ApiFootballTeam = {
     country?: string | null;
     id?: number | string | null;
     name?: string | null;
+    national?: boolean | null;
   } | null;
 };
 
@@ -65,7 +70,23 @@ type ApiFootballSquad = {
 
 type ApiFootballEnvelope<T> = {
   errors?: unknown;
+  paging?: unknown;
+  parameters?: unknown;
   response?: T;
+  results?: number;
+};
+
+export type ApiFootballStatusDebug = {
+  account?: unknown;
+  errors?: unknown;
+  httpStatus: number;
+  requests?: {
+    current?: number | null;
+    limit_day?: number | null;
+  } | null;
+  subscription?: {
+    active?: boolean | null;
+  } | null;
 };
 
 type EspnAthlete = {
@@ -92,6 +113,14 @@ type EspnRosterGroup = {
 type EspnRosterEntry = {
   athlete: EspnAthlete;
   group?: EspnRosterGroup;
+};
+
+type EspnTeamCandidate = {
+  abbreviation?: string | null;
+  displayName?: string | null;
+  id: string;
+  name?: string | null;
+  shortDisplayName?: string | null;
 };
 
 type MatchTeamRow = {
@@ -167,6 +196,20 @@ const WC2026_TEAM_CODE_ALIASES: Record<string, string> = {
   egypt: "EGY",
 };
 const WC2026_CANONICAL_CODES = new Set(Object.values(WC2026_TEAM_CODE_ALIASES));
+const ESPN_CODE_ALIASES: Record<string, string[]> = {
+  ALG: ["ALG", "DZA"],
+  CIV: ["CIV", "IC", "IVC"],
+  COD: ["COD", "DRC", "CGO"],
+  JPN: ["JPN", "JAP"],
+  NED: ["NED", "NET"],
+  ESP: ["ESP", "SPA"],
+  SUI: ["SUI", "SWI"],
+  USA: ["USA", "US"],
+  BIH: ["BIH", "BH"],
+  CPV: ["CPV", "CV"],
+  RSA: ["RSA", "SA"],
+  MAR: ["MAR", "MOR"],
+};
 
 const leagueIds: Record<string, number> = {
   brasileirao_a: 71,
@@ -289,6 +332,12 @@ const lookupMappedTeamId = (map: Record<string, string | number | null | undefin
   return null;
 };
 
+const compatibleCodesFor = (teamCode?: string | null) => {
+  const code = normalizeCode(teamCode);
+  if (!code) return [];
+  return Array.from(new Set([code, ...(ESPN_CODE_ALIASES[code] ?? [])].map(normalizeCode).filter(Boolean)));
+};
+
 const hasEnvelopeErrors = (errors: unknown) => {
   if (!errors) return false;
   if (Array.isArray(errors)) return errors.length > 0;
@@ -316,6 +365,18 @@ const fetchJsonWithTimeout = async <Result,>(
 };
 
 const safeUrlPath = (url: URL) => `${url.pathname}${url.search}`;
+
+const compactJson = (value: unknown) => {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "string") return value || "empty";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized.length > 500 ? `${serialized.slice(0, 497)}...` : serialized;
+  } catch {
+    return String(value);
+  }
+};
 
 const addApiFootballStatusWarning = (httpStatus: number, warnings: string[]) => {
   if (httpStatus === 401 || httpStatus === 403) {
@@ -352,6 +413,73 @@ const fetchApiFootballEnvelope = async <Result,>(
   };
 };
 
+const addApiFootballEnvelopeWarnings = (
+  envelope: ApiFootballEnvelope<unknown> | null,
+  label: string,
+  warnings: string[],
+) => {
+  if (!envelope) return;
+  if (hasEnvelopeErrors(envelope.errors)) {
+    warnings.push(`API-Football errors (${label}): ${compactJson(envelope.errors)}`);
+  }
+};
+
+const readNumberFromUnknown = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const apiFootballEnvelopeDebug = <T,>(
+  envelope: ApiFootballEnvelope<T> | null,
+  extra: Omit<RosterProviderDebug, "errors" | "paging" | "parameters" | "results">,
+): RosterProviderDebug => ({
+  ...extra,
+  errors: envelope?.errors,
+  paging: envelope?.paging,
+  parameters: envelope?.parameters,
+  results: typeof envelope?.results === "number" ? envelope.results : undefined,
+});
+
+export const checkApiFootballStatus = async (
+  apiKey = process.env.API_FOOTBALL_KEY,
+): Promise<ApiFootballStatusDebug | null> => {
+  if (!apiKey) return null;
+
+  const url = new URL(`${getApiFootballBaseUrl()}/status`);
+  const response = await fetch(url.toString(), {
+    headers: apiFootballHeaders(apiKey),
+    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+  });
+  const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+  const requests = payload.requests && typeof payload.requests === "object"
+    ? payload.requests as Record<string, unknown>
+    : null;
+  const subscription = payload.subscription && typeof payload.subscription === "object"
+    ? payload.subscription as Record<string, unknown>
+    : null;
+
+  return {
+    account: payload.account,
+    errors: payload.errors,
+    httpStatus: response.status,
+    requests: requests
+      ? {
+          current: readNumberFromUnknown(requests.current),
+          limit_day: readNumberFromUnknown(requests.limit_day),
+        }
+      : null,
+    subscription: subscription
+      ? {
+          active: typeof subscription.active === "boolean" ? subscription.active : null,
+        }
+      : null,
+  };
+};
+
 const apiFootballHeaders = (apiKey: string) => ({
   "x-apisports-host": "v3.football.api-sports.io",
   "x-apisports-key": apiKey,
@@ -359,7 +487,7 @@ const apiFootballHeaders = (apiKey: string) => ({
 
 const selectBestApiFootballTeam = (teams: ApiFootballTeam[], teamName: string, teamCode: string) => {
   const expectedName = normalizeComparable(teamName);
-  const expectedCode = normalizeCode(teamCode);
+  const expectedCodes = compatibleCodesFor(teamCode);
 
   const scored = teams.flatMap((item) => {
     const team = item.team;
@@ -370,9 +498,10 @@ const selectBestApiFootballTeam = (teams: ApiFootballTeam[], teamName: string, t
     const candidateCountry = normalizeComparable(team.country);
     let score = 0;
 
-    if (expectedCode && candidateCode === expectedCode) score += 100;
-    if (expectedName && candidateName === expectedName) score += 80;
-    if (expectedName && candidateCountry === expectedName) score += 40;
+    if (candidateCode && expectedCodes.includes(candidateCode)) score += 70;
+    if (expectedName && candidateName === expectedName) score += 100;
+    if (expectedName && candidateCountry === expectedName) score += 85;
+    if (team.national === true) score += 60;
     if (expectedName && (candidateName.includes(expectedName) || expectedName.includes(candidateName))) score += 20;
 
     return score > 0 ? [{ id: String(team.id), name: team.name ?? null, score }] : [];
@@ -414,9 +543,12 @@ const resolveApiFootballTeamId = async (
   };
 
   if (input.teamCode) addAttempt({ code: input.teamCode });
+  addAttempt({ country: input.teamName });
+  addAttempt({ search: input.teamName });
+  addAttempt({ name: input.teamName });
   addAttempt({ league: leagueId, search: input.teamName, season });
   addAttempt({ league: leagueId, name: input.teamName, season });
-  addAttempt({ search: input.teamName });
+  addAttempt({ league: leagueId, season });
 
   for (const url of attempts) {
     try {
@@ -428,8 +560,17 @@ const resolveApiFootballTeamId = async (
       );
       const response = envelope?.response ?? [];
       const selected = selectBestApiFootballTeam(response, input.teamName, input.teamCode);
+      addApiFootballEnvelopeWarnings(envelope, "/teams", warnings);
       warnings.push(
-        `DEBUG API-Football /teams: teamName=${input.teamName}; teamCode=${input.teamCode}; path=${safeUrlPath(url)}; httpStatus=${httpStatus}; responseCount=${response.length}; selectedTeamId=${selected?.id ?? "null"}; selectedTeamName=${selected?.name ?? "null"}.`,
+        `DEBUG API-Football /teams: ${compactJson(apiFootballEnvelopeDebug(envelope, {
+          httpStatus,
+          responseCount: response.length,
+          selectedTeamId: selected?.id ?? null,
+          selectedTeamName: selected?.name ?? null,
+          teamCode: input.teamCode,
+          teamName: input.teamName,
+          urlPath: safeUrlPath(url),
+        }))}`,
       );
 
       if (!envelope) continue;
@@ -477,8 +618,17 @@ export const fetchApiFootballRoster = async (
   );
   const squads = envelope?.response ?? [];
   const players = squads.flatMap((squad) => squad.players ?? []);
+  addApiFootballEnvelopeWarnings(envelope, "/players/squads", warnings);
   warnings.push(
-    `DEBUG API-Football /players/squads: teamName=${input.teamName}; teamCode=${input.teamCode}; teamId=${resolvedTeam.teamId}; path=${safeUrlPath(url)}; httpStatus=${httpStatus}; responseCount=${squads.length}; playersCount=${players.length}.`,
+    `DEBUG API-Football /players/squads: ${compactJson(apiFootballEnvelopeDebug(envelope, {
+      httpStatus,
+      playersCount: players.length,
+      responseCount: squads.length,
+      teamCode: input.teamCode,
+      teamId: resolvedTeam.teamId,
+      teamName: input.teamName,
+      urlPath: safeUrlPath(url),
+    }))}`,
   );
 
   if (!envelope) return [];
@@ -549,11 +699,148 @@ const readEspnAthletePosition = (athlete: EspnAthlete, group?: EspnRosterGroup) 
     ?? null;
 };
 
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+
+const readString = (value: unknown) => typeof value === "string" && value.trim() ? value.trim() : null;
+
+const espnCandidateFromUnknown = (value: unknown): EspnTeamCandidate | null => {
+  const record = asRecord(value);
+  if (!record) return null;
+  const team = asRecord(record.team) ?? record;
+  const id = readString(team.id) ?? (typeof team.id === "number" ? String(team.id) : null);
+  if (!id) return null;
+
+  return {
+    abbreviation: readString(team.abbreviation),
+    displayName: readString(team.displayName),
+    id,
+    name: readString(team.name),
+    shortDisplayName: readString(team.shortDisplayName),
+  };
+};
+
+const collectEspnTeams = (payload: unknown) => {
+  const candidates: EspnTeamCandidate[] = [];
+  const refs: string[] = [];
+  const addValue = (value: unknown) => {
+    const record = asRecord(value);
+    const ref = readString(record?.$ref);
+    if (ref) {
+      refs.push(ref);
+      return;
+    }
+
+    const candidate = espnCandidateFromUnknown(value);
+    if (candidate) candidates.push(candidate);
+  };
+  const addArray = (value: unknown) => {
+    if (Array.isArray(value)) value.forEach(addValue);
+  };
+  const root = asRecord(payload);
+  if (!root) return { candidates, refs };
+
+  addArray(root.teams);
+  addArray(root.items);
+
+  if (Array.isArray(root.sports)) {
+    for (const sport of root.sports) {
+      const sportRecord = asRecord(sport);
+      if (!Array.isArray(sportRecord?.leagues)) continue;
+      for (const league of sportRecord.leagues) {
+        const leagueRecord = asRecord(league);
+        addArray(leagueRecord?.teams);
+      }
+    }
+  }
+
+  return { candidates, refs: Array.from(new Set(refs)) };
+};
+
+const selectBestEspnTeam = (teams: EspnTeamCandidate[], teamName: string, teamCode: string) => {
+  const expectedName = normalizeComparable(teamName);
+  const expectedCodes = compatibleCodesFor(teamCode);
+
+  const scored = teams.flatMap((team) => {
+    const candidateCodes = [
+      team.abbreviation,
+      team.shortDisplayName,
+    ].map(normalizeCode).filter(Boolean);
+    const candidateNames = [
+      team.displayName,
+      team.name,
+      team.shortDisplayName,
+    ].map(normalizeComparable).filter(Boolean);
+    let score = 0;
+
+    if (candidateCodes.some((code) => expectedCodes.includes(code))) score += 100;
+    if (candidateNames.some((name) => name === expectedName)) score += 85;
+    if (candidateNames.some((name) => name.includes(expectedName) || expectedName.includes(name))) score += 25;
+
+    return score > 0 ? [{ team, score }] : [];
+  });
+
+  scored.sort((left, right) => right.score - left.score);
+  return scored[0]?.team ?? null;
+};
+
+export const discoverEspnTeamId = async (input: {
+  teamCode: string;
+  teamName: string;
+}, warnings: string[] = []) => {
+  const endpoints = [
+    "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/teams",
+    "https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/teams?limit=1000",
+  ];
+  const allCandidates: EspnTeamCandidate[] = [];
+
+  for (const endpoint of endpoints) {
+    try {
+      const payload = await fetchJsonWithTimeout<unknown>(new URL(endpoint), {}, "ESPN teams");
+      const { candidates, refs } = collectEspnTeams(payload);
+      allCandidates.push(...candidates);
+      warnings.push(`DEBUG ESPN teams: path=${new URL(endpoint).pathname}${new URL(endpoint).search}; responseCount=${candidates.length}; refs=${refs.length}.`);
+
+      for (const ref of refs.slice(0, 300)) {
+        try {
+          const refPayload = await fetchJsonWithTimeout<unknown>(new URL(ref), {}, "ESPN team ref");
+          const candidate = espnCandidateFromUnknown(refPayload);
+          if (candidate) allCandidates.push(candidate);
+        } catch (error) {
+          warnings.push(`ESPN team ref falhou para ${input.teamName}: ${error instanceof Error ? error.message : "erro desconhecido"}.`);
+        }
+      }
+    } catch (error) {
+      warnings.push(`ESPN teams discovery falhou para ${input.teamName}: ${error instanceof Error ? error.message : "erro desconhecido"}.`);
+    }
+  }
+
+  const uniqueCandidates = Array.from(
+    new Map(allCandidates.map((candidate) => [candidate.id, candidate])).values(),
+  );
+  const selected = selectBestEspnTeam(uniqueCandidates, input.teamName, input.teamCode);
+  warnings.push(
+    `DEBUG ESPN discovery: teamName=${input.teamName}; teamCode=${input.teamCode}; candidates=${uniqueCandidates.length}; selectedTeamId=${selected?.id ?? "null"}; selectedTeamName=${selected?.displayName ?? selected?.name ?? "null"}.`,
+  );
+
+  return selected?.id ?? null;
+};
+
 export const fetchEspnRoster = async (
   input: FetchTeamRosterInput,
+  warnings: string[] = [],
 ): Promise<ProviderRosterPlayer[]> => {
-  const teamId = resolveEspnTeamId(input);
-  if (!teamId) return [];
+  const knownTeamId = resolveEspnTeamId(input);
+  const teamId = knownTeamId ?? await discoverEspnTeamId({
+    teamCode: input.teamCode,
+    teamName: input.teamName,
+  }, warnings);
+  if (!teamId) {
+    warnings.push(`ESPN nao encontrou teamId para ${input.teamName} (${input.teamCode}).`);
+    return [];
+  }
 
   const league = process.env.ESPN_SOCCER_LEAGUE || "fifa.world";
   const baseUrl = process.env.ESPN_SOCCER_BASE_URL || "https://site.api.espn.com/apis/site/v2/sports/soccer";
@@ -574,6 +861,12 @@ export const fetchEspnRoster = async (
     return [{ athlete: entry as EspnAthlete }];
   });
   const seen = new Set<string>();
+  warnings.push(`DEBUG ESPN roster: teamName=${input.teamName}; teamCode=${input.teamCode}; teamId=${teamId}; path=${safeUrlPath(url)}; playersCount=${athletes.length}.`);
+
+  if (athletes.length === 0) {
+    warnings.push(`ESPN encontrou teamId ${teamId} para ${input.teamName}, mas roster retornou 0 jogadores.`);
+    return [];
+  }
 
   return athletes.flatMap(({ athlete, group }, index) => {
     const name = athlete.fullName?.trim() || athlete.displayName?.trim() || athlete.name?.trim() || athlete.shortName?.trim();
@@ -629,7 +922,7 @@ export const fetchTeamRoster = async (
   }
 
   try {
-    const roster = await fetchEspnRoster(input);
+    const roster = await fetchEspnRoster(input, warnings);
     if (roster.length > 0) {
       logRoster(`ESPN roster success: ${input.teamName} players=${roster.length}`);
       return roster.map((player) => ({
@@ -638,7 +931,7 @@ export const fetchTeamRoster = async (
       }));
     }
 
-    warnings.push(`ESPN nao retornou elenco para ${input.teamName} (${input.teamCode}) ou nao ha teamId confiavel.`);
+    warnings.push(`ESPN nao retornou elenco para ${input.teamName} (${input.teamCode}).`);
   } catch (error) {
     warnings.push(`ESPN falhou para ${input.teamName} (${input.teamCode}): ${error instanceof Error ? error.message : "erro desconhecido"}.`);
   }

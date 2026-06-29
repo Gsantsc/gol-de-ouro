@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   RosterProviderError,
+  checkApiFootballStatus,
   fetchTeamRoster,
   getTeamsNeedingRoster,
   inferPositionGroup,
+  type ApiFootballStatusDebug,
   type ProviderRosterPlayer,
   type TeamNeedingRoster,
 } from "@/server/roster-provider";
@@ -55,6 +57,10 @@ type TeamSyncResult = {
   team_code: string;
   team_name: string;
   warnings: string[];
+};
+
+type SyncRostersDebug = {
+  apiFootballStatus?: ApiFootballStatusDebug | null;
 };
 
 const PLAYER_SELECT = "id,name,team_code,team_name,position,active,deleted_at,provider_external_id,source";
@@ -128,6 +134,14 @@ const normalizeCode = (value?: string | null) =>
 
 const uniqueWarnings = (warnings: string[]) =>
   Array.from(new Set(warnings.map((warning) => warning.trim()).filter(Boolean)));
+
+const hasProviderErrors = (errors: unknown) => {
+  if (!errors) return false;
+  if (Array.isArray(errors)) return errors.length > 0;
+  if (typeof errors === "object") return Object.keys(errors as Record<string, unknown>).length > 0;
+  if (typeof errors === "string") return errors.trim().length > 0;
+  return true;
+};
 
 const readTeamCodes = (value: unknown) => {
   if (value === undefined || value === null) return null;
@@ -434,6 +448,19 @@ export async function POST(request: NextRequest) {
     const teamCodes = readTeamCodes(body.team_codes);
     const supabase = createServiceSupabaseClient();
     const warnings: string[] = [];
+    const debug: SyncRostersDebug = {};
+    if (process.env.API_FOOTBALL_KEY) {
+      try {
+        const apiFootballStatus = await checkApiFootballStatus(process.env.API_FOOTBALL_KEY);
+        debug.apiFootballStatus = apiFootballStatus;
+        if (hasProviderErrors(apiFootballStatus?.errors)) {
+          warnings.push(`API-Football errors (/status): ${JSON.stringify(apiFootballStatus?.errors)}`);
+        }
+      } catch {
+        warnings.push("Nao foi possivel validar status da API-Football.");
+      }
+    }
+
     const teamsFromMatches = await getTeamsNeedingRoster(supabase, championship, warnings);
     const teams = teamCodes
       ? teamsFromMatches.filter((team) => teamCodes.includes(normalizeCode(team.team_code)))
@@ -453,6 +480,8 @@ export async function POST(request: NextRequest) {
     }
 
     const summary = {
+      debug,
+      globalWarnings: uniqueWarnings(warnings),
       playersFetched: teamResults.reduce((sum, team) => sum + team.playersFetched, 0),
       playersUpserted: teamResults.reduce((sum, team) => sum + team.playersUpserted, 0),
       rostersUpserted: teamResults.reduce((sum, team) => sum + team.rostersUpserted, 0),
@@ -461,6 +490,13 @@ export async function POST(request: NextRequest) {
       teamsSynced: teamResults.filter((team) => team.rostersUpserted > 0).length,
       warnings: uniqueWarnings(warnings),
     };
+
+    if (summary.teamsChecked > 0 && summary.playersFetched === 0) {
+      summary.globalWarnings.push(
+        "Times encontrados, mas nenhum elenco retornou do provider. A API-Football respondeu sem teamId/squad para estas selecoes e o ESPN nao retornou roster confiavel.",
+      );
+      summary.warnings = uniqueWarnings([...summary.warnings, ...summary.globalWarnings]);
+    }
 
     return NextResponse.json({
       championship,

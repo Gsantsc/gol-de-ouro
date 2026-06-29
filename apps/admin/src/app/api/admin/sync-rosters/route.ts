@@ -6,10 +6,10 @@ import {
   RosterProviderError,
   checkApiFootballStatus,
   fetchTeamRoster,
+  getApiFootballKey,
   getTeamsNeedingRoster,
   inferPositionGroup,
   isApiFootballMissingApplicationKeyError,
-  normalizeApiFootballKey,
   type ApiFootballStatusDebug,
   type ProviderRosterPlayer,
   type TeamNeedingRoster,
@@ -66,7 +66,11 @@ type TeamSyncResult = {
 };
 
 type SyncRostersDebug = {
-  apiFootballStatus?: ApiFootballStatusDebug | null;
+  apiFootballEnv: {
+    keyLength: number;
+    keyPresent: boolean;
+  };
+  apiFootballStatus?: ApiFootballStatusDebug;
 };
 
 const PLAYER_SELECT = "id,name,team_code,team_name,position,active,deleted_at,provider_external_id,source";
@@ -137,6 +141,12 @@ const normalizeCode = (value?: string | null) =>
 
 const uniqueWarnings = (warnings: string[]) =>
   Array.from(new Set(warnings.map((warning) => warning.trim()).filter(Boolean)));
+
+const safeErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message;
+  const serialized = JSON.stringify(error);
+  return serialized ?? String(error);
+};
 
 const hasProviderErrors = (errors: unknown) => {
   if (!errors) return false;
@@ -377,6 +387,7 @@ const syncTeamRoster = async (
   supabase: SupabaseClient,
   championship: string,
   team: TeamNeedingRoster,
+  options: { skipApiFootball?: boolean } = {},
 ) => {
   const result = emptyTeamResult(team);
 
@@ -387,14 +398,14 @@ const syncTeamRoster = async (
       providerTeamId: team.provider_team_id,
       teamCode: team.team_code,
       teamName: team.team_name,
-    });
+    }, { skipApiFootball: options.skipApiFootball });
   } catch (error) {
     if (error instanceof RosterProviderError) {
       result.warnings.push(error.message, ...error.warnings);
       return result;
     }
 
-    result.warnings.push(error instanceof Error ? error.message : `Falha ao sincronizar ${team.team_name}.`);
+    result.warnings.push(`Falha ao sincronizar ${team.team_name}: ${safeErrorMessage(error)}.`);
     return result;
   }
 
@@ -418,9 +429,7 @@ const syncTeamRoster = async (
       result.playersUpserted += 1;
     } catch (error) {
       result.warnings.push(
-        `Falha ao gravar jogador ${providerPlayer.name} (${team.team_code}): ${
-          error instanceof Error ? error.message : "erro desconhecido"
-        }.`,
+        `Falha ao gravar jogador ${providerPlayer.name} (${team.team_code}): ${safeErrorMessage(error)}.`,
       );
     }
   }
@@ -429,8 +438,9 @@ const syncTeamRoster = async (
     try {
       result.rostersUpserted = await upsertCompetitionRosters(supabase, championship, syncedPlayers);
     } catch (error) {
+      const message = safeErrorMessage(error);
       result.warnings.push(
-        `Falha ao vincular roster de ${team.team_name}: ${error instanceof Error ? error.message : "erro desconhecido"}.`,
+        `Falha ao vincular roster de ${team.team_name}: ${message}.`,
       );
     }
   }
@@ -459,22 +469,37 @@ export async function POST(request: NextRequest) {
     const teamCodes = readTeamCodes(body.team_codes);
     const supabase = createServiceSupabaseClient();
     const warnings: string[] = [];
-    const debug: SyncRostersDebug = {};
-    const apiFootballKey = normalizeApiFootballKey(process.env.API_FOOTBALL_KEY);
-    if (apiFootballKey) {
-      try {
-        const apiFootballStatus = await checkApiFootballStatus(apiFootballKey);
-        debug.apiFootballStatus = apiFootballStatus;
-        if (hasProviderErrors(apiFootballStatus?.errors)) {
-          warnings.push(`API-Football errors (/status): ${JSON.stringify(apiFootballStatus?.errors)}`);
-        }
-        if (isApiFootballMissingApplicationKeyError(apiFootballStatus?.errors)) {
-          warnings.push(API_FOOTBALL_KEY_NOT_RECEIVED_WARNING);
-        }
-      } catch {
-        warnings.push("Nao foi possivel validar status da API-Football.");
+    const rawApiFootballKey = process.env.API_FOOTBALL_KEY?.trim();
+    const apiFootballKey = getApiFootballKey();
+    const debug: SyncRostersDebug = {
+      apiFootballEnv: {
+        keyLength: rawApiFootballKey?.length ?? 0,
+        keyPresent: Boolean(rawApiFootballKey),
+      },
+    };
+    let skipApiFootball = false;
+
+    try {
+      const apiFootballStatus = await checkApiFootballStatus();
+      debug.apiFootballStatus = apiFootballStatus;
+
+      if (apiFootballStatus.skipped) {
+        skipApiFootball = true;
+        warnings.push(API_FOOTBALL_MISSING_RUNTIME_KEY_WARNING);
+      } else if (hasProviderErrors(apiFootballStatus.errors)) {
+        warnings.push(`API-Football errors (/status): ${JSON.stringify(apiFootballStatus.errors)}`);
       }
-    } else {
+
+      if (isApiFootballMissingApplicationKeyError(apiFootballStatus.errors)) {
+        skipApiFootball = true;
+        warnings.push(API_FOOTBALL_KEY_NOT_RECEIVED_WARNING);
+      }
+    } catch (error) {
+      warnings.push(`Nao foi possivel validar status da API-Football: ${safeErrorMessage(error)}.`);
+    }
+
+    if (!apiFootballKey) {
+      skipApiFootball = true;
       warnings.push(API_FOOTBALL_MISSING_RUNTIME_KEY_WARNING);
     }
 
@@ -497,7 +522,7 @@ export async function POST(request: NextRequest) {
 
     const teamResults: TeamSyncResult[] = [];
     for (const team of teams) {
-      const teamResult = await syncTeamRoster(supabase, championship, team);
+      const teamResult = await syncTeamRoster(supabase, championship, team, { skipApiFootball });
       teamResults.push(teamResult);
       warnings.push(...teamResult.warnings.map((warning) => `${team.team_code}: ${warning}`));
     }

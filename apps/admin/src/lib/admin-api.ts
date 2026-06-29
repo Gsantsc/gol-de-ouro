@@ -432,17 +432,24 @@ export type SyncRostersResponse = {
   remainingTeams: number;
   summary: {
     debug?: {
+      apiFootballEnv?: {
+        keyLength: number;
+        keyPresent: boolean;
+      };
       apiFootballStatus?: {
         account?: unknown;
         errors?: unknown;
-        httpStatus: number;
+        httpStatus?: number;
+        ok: boolean;
         requests?: {
           current?: number | null;
           limit_day?: number | null;
         } | null;
+        skipped?: boolean;
         subscription?: {
           active?: boolean | null;
         } | null;
+        warning?: string;
       } | null;
     };
     globalWarnings?: string[];

@@ -79,14 +79,17 @@ type ApiFootballEnvelope<T> = {
 export type ApiFootballStatusDebug = {
   account?: unknown;
   errors?: unknown;
-  httpStatus: number;
+  httpStatus?: number;
+  ok: boolean;
   requests?: {
     current?: number | null;
     limit_day?: number | null;
   } | null;
+  skipped?: boolean;
   subscription?: {
     active?: boolean | null;
   } | null;
+  warning?: string;
 };
 
 type EspnAthlete = {
@@ -152,7 +155,8 @@ const API_FOOTBALL_SOURCE = "api-football-roster-sync";
 const ESPN_SOURCE = "espn-roster-sync";
 const DEFAULT_TIMEOUT_MS = 25000;
 const POSITION_GROUPS = new Set<PositionGroup>(["GOL", "DEF", "MEI", "ATA", "RS"]);
-export const API_FOOTBALL_MISSING_RUNTIME_KEY_WARNING = "API_FOOTBALL_KEY ausente no runtime do Admin.";
+const API_FOOTBALL_MISSING_RUNTIME_KEY_SHORT_WARNING = "API_FOOTBALL_KEY ausente no runtime do Admin.";
+export const API_FOOTBALL_MISSING_RUNTIME_KEY_WARNING = "API_FOOTBALL_KEY ausente no runtime do Admin. Confira se a variável está em Production no projeto gol-de-ouro-admin e faça Redeploy.";
 export const API_FOOTBALL_KEY_NOT_RECEIVED_WARNING = "API-Football não recebeu a chave. Verifique se API_FOOTBALL_KEY está configurada em Production no projeto gol-de-ouro-admin e se houve redeploy.";
 let apiFootballKeyDetectionLogged = false;
 
@@ -286,19 +290,34 @@ const toPositiveInteger = (value: unknown, min = 1, max = Number.MAX_SAFE_INTEGE
 const getApiFootballBaseUrl = () =>
   process.env.API_FOOTBALL_BASE_URL || "https://v3.football.api-sports.io";
 
-export const normalizeApiFootballKey = (apiKey?: string | null) => {
-  const normalizedApiKey = apiKey?.trim();
-  return normalizedApiKey || null;
+export const getApiFootballKey = () => {
+  const key = process.env.API_FOOTBALL_KEY?.trim();
+
+  if (!key || /^API_FOOTBALL_KEY\s*=/.test(key)) {
+    return null;
+  }
+
+  return key;
 };
 
 const addUniqueWarning = (warnings: string[], warning: string) => {
   if (!warnings.includes(warning)) warnings.push(warning);
 };
 
-const logApiFootballKeyDetectedOnce = () => {
+const safeErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message;
+  const serialized = JSON.stringify(error);
+  return serialized ?? String(error);
+};
+
+const logApiFootballKeyRuntimeOnce = (key: string | null) => {
   if (apiFootballKeyDetectionLogged) return;
   apiFootballKeyDetectionLogged = true;
-  console.info(`[ROSTER ${new Date().toISOString()}] API_FOOTBALL_KEY detectada no runtime: true`);
+  const message = `API_FOOTBALL_KEY runtime presente: ${Boolean(key)}`;
+  logRoster(message);
+  if (process.env.NODE_ENV === "production") {
+    console.info(`[ROSTER ${new Date().toISOString()}] ${message}`);
+  }
 };
 
 const readJsonMap = (envNames: string[]) => {
@@ -394,12 +413,13 @@ const addApiFootballStatusWarning = (httpStatus: number, warnings: string[]) => 
 
 const fetchApiFootballEnvelope = async <Result,>(
   url: URL,
-  apiKey: string | null | undefined,
   label: string,
   warnings: string[],
 ) => {
-  const normalizedApiKey = normalizeApiFootballKey(apiKey);
-  if (!normalizedApiKey) {
+  const apiKey = getApiFootballKey();
+  logApiFootballKeyRuntimeOnce(apiKey);
+
+  if (!apiKey) {
     addUniqueWarning(warnings, API_FOOTBALL_MISSING_RUNTIME_KEY_WARNING);
     return {
       envelope: null,
@@ -407,9 +427,8 @@ const fetchApiFootballEnvelope = async <Result,>(
     };
   }
 
-  logApiFootballKeyDetectedOnce();
   const response = await fetch(url.toString(), {
-    headers: apiFootballHeaders(normalizedApiKey),
+    headers: apiFootballHeaders(apiKey),
     signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
   });
   const httpStatus = response.status;
@@ -460,16 +479,21 @@ const apiFootballEnvelopeDebug = <T,>(
   results: typeof envelope?.results === "number" ? envelope.results : undefined,
 });
 
-export const checkApiFootballStatus = async (
-  apiKey = process.env.API_FOOTBALL_KEY,
-): Promise<ApiFootballStatusDebug | null> => {
-  const normalizedApiKey = normalizeApiFootballKey(apiKey);
-  if (!normalizedApiKey) return null;
+export const checkApiFootballStatus = async (): Promise<ApiFootballStatusDebug> => {
+  const apiKey = getApiFootballKey();
+  logApiFootballKeyRuntimeOnce(apiKey);
+
+  if (!apiKey) {
+    return {
+      ok: false,
+      skipped: true,
+      warning: API_FOOTBALL_MISSING_RUNTIME_KEY_SHORT_WARNING,
+    };
+  }
 
   const url = new URL(`${getApiFootballBaseUrl()}/status`);
-  logApiFootballKeyDetectedOnce();
   const response = await fetch(url.toString(), {
-    headers: apiFootballHeaders(normalizedApiKey),
+    headers: apiFootballHeaders(apiKey),
     signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
   });
   const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -484,6 +508,7 @@ export const checkApiFootballStatus = async (
     account: payload.account,
     errors: payload.errors,
     httpStatus: response.status,
+    ok: response.ok && !hasEnvelopeErrors(payload.errors),
     requests: requests
       ? {
           current: readNumberFromUnknown(requests.current),
@@ -531,7 +556,6 @@ const selectBestApiFootballTeam = (teams: ApiFootballTeam[], teamName: string, t
 
 const resolveApiFootballTeamId = async (
   input: FetchTeamRosterInput,
-  apiKey: string,
   warnings: string[],
 ) => {
   const providerTeamId = input.providerTeamId?.trim();
@@ -565,7 +589,6 @@ const resolveApiFootballTeamId = async (
     try {
       const { envelope, httpStatus } = await fetchApiFootballEnvelope<ApiFootballTeam[]>(
         url,
-        apiKey,
         "API-Football teams",
         warnings,
       );
@@ -598,7 +621,7 @@ const resolveApiFootballTeamId = async (
 
       if (selected) return { teamId: selected.id, teamName: selected.name };
     } catch (error) {
-      warnings.push(`Falha ao buscar team id API-Football para ${input.teamName}: ${error instanceof Error ? error.message : "erro desconhecido"}.`);
+      warnings.push(`Falha ao buscar team id API-Football para ${input.teamName}: ${safeErrorMessage(error)}.`);
     }
   }
 
@@ -608,16 +631,17 @@ const resolveApiFootballTeamId = async (
 
 export const fetchApiFootballRoster = async (
   input: FetchTeamRosterInput,
-  apiKey = process.env.API_FOOTBALL_KEY,
   warnings: string[] = [],
 ): Promise<ProviderRosterPlayer[]> => {
-  const normalizedApiKey = normalizeApiFootballKey(apiKey);
-  if (!normalizedApiKey) {
+  const apiKey = getApiFootballKey();
+  logApiFootballKeyRuntimeOnce(apiKey);
+
+  if (!apiKey) {
     addUniqueWarning(warnings, API_FOOTBALL_MISSING_RUNTIME_KEY_WARNING);
     return [];
   }
 
-  const resolvedTeam = await resolveApiFootballTeamId(input, normalizedApiKey, warnings);
+  const resolvedTeam = await resolveApiFootballTeamId(input, warnings);
   warnings.forEach((warning) => logRoster(warning, "warn"));
   if (!resolvedTeam?.teamId) return [];
 
@@ -627,7 +651,6 @@ export const fetchApiFootballRoster = async (
   logRoster(`API-Football roster start: ${input.teamName} (${input.teamCode}) team=${resolvedTeam.teamId}`);
   const { envelope, httpStatus } = await fetchApiFootballEnvelope<ApiFootballSquad[]>(
     url,
-    normalizedApiKey,
     "API-Football roster",
     warnings,
   );
@@ -824,11 +847,11 @@ export const discoverEspnTeamId = async (input: {
           const candidate = espnCandidateFromUnknown(refPayload);
           if (candidate) allCandidates.push(candidate);
         } catch (error) {
-          warnings.push(`ESPN team ref falhou para ${input.teamName}: ${error instanceof Error ? error.message : "erro desconhecido"}.`);
+          warnings.push(`ESPN team ref falhou para ${input.teamName}: ${safeErrorMessage(error)}.`);
         }
       }
     } catch (error) {
-      warnings.push(`ESPN teams discovery falhou para ${input.teamName}: ${error instanceof Error ? error.message : "erro desconhecido"}.`);
+      warnings.push(`ESPN teams discovery falhou para ${input.teamName}: ${safeErrorMessage(error)}.`);
     }
   }
 
@@ -913,14 +936,18 @@ export const fetchEspnRoster = async (
 
 export const fetchTeamRoster = async (
   input: FetchTeamRosterInput,
+  options: { skipApiFootball?: boolean } = {},
 ): Promise<ProviderRosterPlayer[]> => {
   const warnings: string[] = [];
   logRoster(`Roster sync team start: ${input.teamName} (${input.teamCode}) championship=${input.championship}`);
-  const apiFootballKey = normalizeApiFootballKey(process.env.API_FOOTBALL_KEY);
+  const apiFootballKey = getApiFootballKey();
+  logApiFootballKeyRuntimeOnce(apiFootballKey);
 
-  if (apiFootballKey) {
+  if (options.skipApiFootball) {
+    // Global sync status already explains why API-Football was skipped.
+  } else if (apiFootballKey) {
     try {
-      const roster = await fetchApiFootballRoster(input, apiFootballKey, warnings);
+      const roster = await fetchApiFootballRoster(input, warnings);
       if (roster.length > 0) {
         logRoster(`API-Football roster success: ${input.teamName} players=${roster.length}`);
         return roster.map((player) => ({
@@ -931,7 +958,7 @@ export const fetchTeamRoster = async (
 
       warnings.push(`API-Football nao retornou elenco para ${input.teamName} (${input.teamCode}).`);
     } catch (error) {
-      warnings.push(`API-Football falhou para ${input.teamName} (${input.teamCode}): ${error instanceof Error ? error.message : "erro desconhecido"}.`);
+      warnings.push(`API-Football falhou para ${input.teamName} (${input.teamCode}): ${safeErrorMessage(error)}.`);
     }
   } else {
     addUniqueWarning(warnings, API_FOOTBALL_MISSING_RUNTIME_KEY_WARNING);
@@ -949,7 +976,7 @@ export const fetchTeamRoster = async (
 
     warnings.push(`ESPN nao retornou elenco para ${input.teamName} (${input.teamCode}).`);
   } catch (error) {
-    warnings.push(`ESPN falhou para ${input.teamName} (${input.teamCode}): ${error instanceof Error ? error.message : "erro desconhecido"}.`);
+    warnings.push(`ESPN falhou para ${input.teamName} (${input.teamCode}): ${safeErrorMessage(error)}.`);
   }
 
   const message = `Provider nao retornou elenco para ${input.teamName} (${input.teamCode}).`;

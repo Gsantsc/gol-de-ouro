@@ -1,3 +1,5 @@
+import { isKnockoutPlaceholder } from "./team-display";
+
 // Team aliases and flag resolution for World Cup 2026 (48 teams)
 // Provides centralized team name normalization and flag URL resolution with fallback chain
 
@@ -505,7 +507,8 @@ export const resolveFlagUrl = (teamName: string): string | null =>
   getFlagUrlCandidates(teamName)[0] ?? null;
 
 export const isPlaceholderTeam = (teamName: string) =>
-  /^(TBD|Winner |Loser |Runner-up |Third Place |Group |Quarterfinal|Round of|Semifinal)/i.test(teamName.trim());
+  isKnockoutPlaceholder(teamName)
+  || /^(TBD|Winner |Loser |Runner-up |Third Place |Group |Quarterfinal|Round of|Semifinal)/i.test(teamName.trim());
 
 export const getFlagUrlCandidates = (teamName: string, logoUrl?: string | null): string[] => {
   const urls: string[] = [];

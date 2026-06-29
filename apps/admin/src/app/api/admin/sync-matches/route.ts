@@ -8,12 +8,18 @@ import {
   CHAMPIONSHIP_LABELS,
   calculateMatchStatus,
   createMatchesProvider,
+  isKnockoutPlaceholder,
   predictionWindowPayload,
   type ChampionshipKey,
   type ProviderMatch,
   type ProviderMatchStats,
   type TournamentType
 } from "@gol-de-ouro/shared";
+import {
+  emptyKnockoutResolutionSummary,
+  resolveKnockoutParticipants,
+  type KnockoutResolutionSummary
+} from "@/server/knockout-resolver";
 
 type SyncSummary = {
   insertedCount: number;
@@ -26,14 +32,19 @@ type SyncSummary = {
   lineupsSynced: number;
   cacheHits: number;
   cacheMisses: number;
+  knockoutResolution: KnockoutResolutionSummary;
 };
 
 type ExistingMatchRow = {
   away_score?: number | null;
+  away_team?: string | null;
+  away_team_logo_url?: string | null;
   first_goal_no_goals?: boolean | null;
   first_goal_scorer?: string | null;
   first_goal_scorer_id?: string | null;
   home_score?: number | null;
+  home_team?: string | null;
+  home_team_logo_url?: string | null;
   id: string;
   live_score?: unknown;
   man_of_match?: string | null;
@@ -58,6 +69,10 @@ const EXISTING_MATCH_SELECT = [
   "status",
   "provider_external_id",
   "stats",
+  "home_team",
+  "away_team",
+  "home_team_logo_url",
+  "away_team_logo_url",
   "home_score",
   "away_score",
   "live_score",
@@ -405,16 +420,33 @@ const upsertProviderMatch = async (
   const richStats = providerMatch.stats;
   const kickoffUtc = readProviderStatString(richStats, "kickoff_utc") ?? providerMatch.kickoff;
   const venueTimezone = readProviderStatString(richStats, "venue_timezone");
+  const existing = await findExistingProviderMatch(supabase, providerName, providerMatch);
+  const providerHomeIsPlaceholder = isKnockoutPlaceholder(providerMatch.homeTeam);
+  const providerAwayIsPlaceholder = isKnockoutPlaceholder(providerMatch.awayTeam);
+  const existingHomeTeam = existing?.home_team ?? null;
+  const existingAwayTeam = existing?.away_team ?? null;
+  const existingHomeLogoUrl = existing?.home_team_logo_url ?? null;
+  const existingAwayLogoUrl = existing?.away_team_logo_url ?? null;
+  const existingHomeIsReal = existingHomeTeam ? !isKnockoutPlaceholder(existingHomeTeam) : false;
+  const existingAwayIsReal = existingAwayTeam ? !isKnockoutPlaceholder(existingAwayTeam) : false;
+  const homeTeam = existingHomeIsReal && providerHomeIsPlaceholder ? existingHomeTeam : providerMatch.homeTeam;
+  const awayTeam = existingAwayIsReal && providerAwayIsPlaceholder ? existingAwayTeam : providerMatch.awayTeam;
+  const homeLogoUrl = existingHomeIsReal && providerHomeIsPlaceholder
+    ? existingHomeLogoUrl ?? providerMatch.homeLogoUrl
+    : providerMatch.homeLogoUrl;
+  const awayLogoUrl = existingAwayIsReal && providerAwayIsPlaceholder
+    ? existingAwayLogoUrl ?? providerMatch.awayLogoUrl
+    : providerMatch.awayLogoUrl;
 
   // FIX MATCH UPSERT - Payload includes all required fields: provider_name, provider_external_id, championship, last_synced_at, home_team, away_team, logos, start_time, status
   const payload = {
     away_score: providerMatch.awayScore,
-    away_team: providerMatch.awayTeam,
-    away_team_logo_url: providerMatch.awayLogoUrl,
+    away_team: awayTeam,
+    away_team_logo_url: awayLogoUrl,
     championship: providerMatch.championship,
     home_score: providerMatch.homeScore,
-    home_team: providerMatch.homeTeam,
-    home_team_logo_url: providerMatch.homeLogoUrl,
+    home_team: homeTeam,
+    home_team_logo_url: homeLogoUrl,
     last_synced_at: new Date().toISOString(),
     live_score: { away: providerMatch.awayScore, home: providerMatch.homeScore },
     prediction_close_at: windowPayload.prediction_close_at,
@@ -434,8 +466,6 @@ const upsertProviderMatch = async (
     status,
     tournament_id: tournamentId,
   };
-
-  const existing = await findExistingProviderMatch(supabase, providerName, providerMatch);
 
   const matchResult = existing
     ? await supabase.from("matches").update(payload).eq("id", existing.id).select("id").single()
@@ -619,6 +649,12 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary & { starte
   }
 
   logSync(`SYNC FIXTURES COMPLETE: ${insertedCount} inserted, ${updatedCount} updated`);
+  let knockoutResolution = emptyKnockoutResolutionSummary();
+  try {
+    knockoutResolution = await resolveKnockoutParticipants(supabase, "world_cup_2026");
+  } catch (error) {
+    knockoutResolution.warnings.push(error instanceof Error ? error.message : "Falha ao resolver mata-mata.");
+  }
 
   const runMessage =
     provider.name === "local-fixtures"
@@ -634,6 +670,7 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary & { starte
   const logResult = await supabase.from("match_provider_runs").insert({
     checked_matches: providerMatches.length,
     inserted_count: insertedCount,
+    knockout_updated: knockoutResolution.resolved,
     message: runMessage,
     provider_name: provider.name,
     status: "success",
@@ -650,6 +687,7 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary & { starte
   return {
     insertedCount,
     providerName: provider.name,
+    knockoutResolution,
     updatedCount,
     teamsSynced,
     standingsSynced: 0, // TODO: Implement standings sync
@@ -714,6 +752,8 @@ export async function POST(request: NextRequest) {
         finishedMatches: 0,
         scoredPredictions: 0,
         rankingUpdated: 0,
+        knockoutResolution: result.knockoutResolution,
+        knockoutUpdated: result.knockoutResolution.resolved,
         teamsSynced: result.teamsSynced,
         cacheHits: result.cacheHits,
         cacheMisses: result.cacheMisses,

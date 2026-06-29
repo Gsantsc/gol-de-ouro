@@ -96,6 +96,8 @@ export async function POST(request: NextRequest) {
         finishedMatches: summary.finishedMatches,
         scoredPredictions: summary.scoredPredictions,
         rankingUpdated: summary.rankingUpdated || 0,
+        knockoutResolution: summary.knockoutResolution,
+        knockoutUpdated: summary.knockoutUpdated,
         errorsCount: summary.errors.length
       },
       changedMatches: [],

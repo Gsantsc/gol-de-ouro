@@ -14,7 +14,7 @@ import {
   Users
 } from "lucide-react-native";
 import type { AppInvite, Group, Match, Notification, Prediction, Profile, Ranking, Tournament } from "../shared";
-import { calculateMatchStatus, deriveUserPerformance } from "../shared";
+import { calculateMatchStatus, deriveUserPerformance, isKnockoutPlaceholder } from "../shared";
 import { MatchCard } from "../components/MatchCard";
 import {
   AppButton,
@@ -78,7 +78,12 @@ export const HomeScreen = ({
     status: calculateMatchStatus(match, new Date(), predictionLockMinutes)
   }));
   const liveMatches = rowsByStatus.filter((row) => row.status === "ao_vivo").map((row) => row.match);
-  const openUnpredicted = rowsByStatus.find((row) => row.status === "aberto" && !predictedMatchIds.has(row.match.id))?.match ?? null;
+  const openUnpredicted = rowsByStatus.find((row) =>
+    row.status === "aberto"
+    && !predictedMatchIds.has(row.match.id)
+    && !isKnockoutPlaceholder(row.match.home_team)
+    && !isKnockoutPlaceholder(row.match.away_team)
+  )?.match ?? null;
   const upcomingMatches = rowsByStatus.filter((row) => row.status !== "encerrado").map((row) => row.match);
   const nextMatch = openUnpredicted ?? upcomingMatches[0] ?? visibleMatches[0] ?? null;
   const performance = deriveUserPerformance({ matches, predictions, ranking });

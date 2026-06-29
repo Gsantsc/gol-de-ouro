@@ -11,6 +11,11 @@ import {
   type PredictionWinner
 } from "@gol-de-ouro/shared";
 import { formatSyncErrorForDisplay } from "../lib/sync-error-format";
+import {
+  emptyKnockoutResolutionSummary,
+  resolveKnockoutParticipants,
+  type KnockoutResolutionSummary
+} from "./knockout-resolver";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -110,6 +115,7 @@ export type LiveResultsSyncSummary = {
   dryRun: boolean;
   errors: string[];
   finishedAt: string;
+  knockoutResolution: KnockoutResolutionSummary;
   finishedMatches: number;
   knockoutUpdated: number;
   liveMatches: number;
@@ -849,113 +855,6 @@ const refreshGroupStandings = async (supabase: SupabaseClient, matches: MatchRow
   return { changed: changed.length, standings };
 };
 
-const matchNumberOf = (match: MatchRow) => readNumber(readStats(match).match_number);
-
-const resolveWinnerLoser = (match: MatchRow, kind: "winner" | "loser") => {
-  const homeScore = Number(match.home_score ?? 0);
-  const awayScore = Number(match.away_score ?? 0);
-  if (match.status !== "encerrado" || homeScore === awayScore) return null;
-  if (kind === "winner") return homeScore > awayScore ? match.home_team : match.away_team;
-  return homeScore > awayScore ? match.away_team : match.home_team;
-};
-
-const selectQualifiedGroupTeam = (
-  token: string,
-  standings: StandingDraft[],
-  usedThirdPlaceTeams: Set<string>,
-) => {
-  const winner = token.match(/^Winner Group ([A-L])$/i);
-  if (winner) {
-    return standings.find((standing) => standing.group_code === winner[1] && standing.position === 1 && standing.played >= 3)?.team_name ?? null;
-  }
-
-  const runner = token.match(/^Runner-up Group ([A-L])$/i);
-  if (runner) {
-    return standings.find((standing) => standing.group_code === runner[1] && standing.position === 2 && standing.played >= 3)?.team_name ?? null;
-  }
-
-  const third = token.match(/^Third Place Group ([A-L/]+)$/i);
-  if (!third) return null;
-
-  const allowedGroups = new Set(third[1].split("/"));
-  const thirdPlaceRanking = standings
-    .filter((standing) => standing.position === 3 && standing.played >= 3)
-    .sort((left, right) =>
-      right.points - left.points
-      || right.goal_difference - left.goal_difference
-      || right.goals_for - left.goals_for
-      || left.team_name.localeCompare(right.team_name),
-    );
-
-  const selected = thirdPlaceRanking.find(
-    (standing) => allowedGroups.has(standing.group_code) && !usedThirdPlaceTeams.has(standing.team_name),
-  );
-  if (!selected) return null;
-
-  usedThirdPlaceTeams.add(selected.team_name);
-  return selected.team_name;
-};
-
-const resolvePlaceholder = (
-  value: string,
-  matchesByNumber: Map<number, MatchRow>,
-  standings: StandingDraft[],
-  usedThirdPlaceTeams: Set<string>,
-) => {
-  const groupTeam = selectQualifiedGroupTeam(value, standings, usedThirdPlaceTeams);
-  if (groupTeam) return groupTeam;
-
-  const winner = value.match(/^Winner Match (\d+)$/i);
-  if (winner) {
-    const source = matchesByNumber.get(Number(winner[1]));
-    return source ? resolveWinnerLoser(source, "winner") : null;
-  }
-
-  const loser = value.match(/^Loser Match (\d+)$/i);
-  if (loser) {
-    const source = matchesByNumber.get(Number(loser[1]));
-    return source ? resolveWinnerLoser(source, "loser") : null;
-  }
-
-  return null;
-};
-
-// KNOCKOUT UPDATE
-const updateKnockoutMatches = async (
-  supabase: SupabaseClient,
-  matches: MatchRow[],
-  standings: StandingDraft[],
-  dryRun: boolean,
-) => {
-  const matchesByNumber = new Map<number, MatchRow>();
-  for (const match of matches) {
-    const matchNumber = matchNumberOf(match);
-    if (matchNumber !== null) matchesByNumber.set(matchNumber, match);
-  }
-
-  const usedThirdPlaceTeams = new Set<string>();
-  let updated = 0;
-
-  for (const match of [...matches].sort((left, right) => (matchNumberOf(left) ?? 999) - (matchNumberOf(right) ?? 999))) {
-    const nextHome = resolvePlaceholder(match.home_team, matchesByNumber, standings, usedThirdPlaceTeams) ?? match.home_team;
-    const nextAway = resolvePlaceholder(match.away_team, matchesByNumber, standings, usedThirdPlaceTeams) ?? match.away_team;
-    if (nextHome === match.home_team && nextAway === match.away_team) continue;
-
-    Object.assign(match, { home_team: nextHome, away_team: nextAway });
-    updated += 1;
-
-    if (!dryRun) {
-      const { error } = await supabase
-        .from("matches")
-        .update({ away_team: nextAway, home_team: nextHome })
-        .eq("id", match.id);
-      if (error) throw error;
-    }
-  }
-
-  return updated;
-};
-
 // SYNC RUN LOGS
 const logSyncRun = async (supabase: SupabaseClient, summary: LiveResultsSyncSummary) => {
   const status = classifySyncStatus(summary.errors, summary.updatedMatches, summary.checkedMatches);
@@ -1029,6 +928,7 @@ export const runLiveResultsSync = async ({
   let rankingUpdated = 0;
   let standingsUpdated = 0;
   let knockoutUpdated = 0;
+  let knockoutResolution = emptyKnockoutResolutionSummary();
 
   try {
     const allMatches = await listMatches(supabase);
@@ -1054,7 +954,14 @@ export const runLiveResultsSync = async ({
     rankingUpdated = await refreshRankings(supabase, predictions, allMatches, dryRun);
     const standingsResult = await refreshGroupStandings(supabase, allMatches, dryRun);
     standingsUpdated = standingsResult.changed;
-    knockoutUpdated = await updateKnockoutMatches(supabase, allMatches, standingsResult.standings, dryRun);
+    try {
+      knockoutResolution = await resolveKnockoutParticipants(supabase, "world_cup_2026", dryRun);
+    } catch (error) {
+      const message = serializeSyncError(error);
+      errors.push(message);
+      knockoutResolution.warnings.push(message);
+    }
+    knockoutUpdated = knockoutResolution.resolved;
 
     liveMatches = allMatches.filter((match) => match.status === "ao_vivo").length;
     finishedMatches = allMatches.filter((match) => match.status === "encerrado").length;
@@ -1068,6 +975,7 @@ export const runLiveResultsSync = async ({
     errors,
     finishedAt: new Date().toISOString(),
     finishedMatches,
+    knockoutResolution,
     knockoutUpdated,
     liveMatches,
     provider: providerName,

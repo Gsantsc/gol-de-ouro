@@ -5,10 +5,14 @@ import type { Match, Player, Prediction } from "../shared";
 import {
   PREDICTION_SCORE_MAX,
   PREDICTION_SCORE_MIN,
-  canSubmitPrediction,
+  canCreatePrediction,
   formatDateTimePtBr,
   formatMatchupDisplayName,
+  formatTeamDisplayName,
+  getSeedLabel,
   getTeamDisplayName,
+  hasUndefinedParticipant,
+  isKnockoutPlaceholder,
   isPlayerEligibleForMatch,
   normalizeTeamNameWithAliases,
   predictionOutcome
@@ -30,9 +34,6 @@ const normalize = (value: string) =>
 
 const matchTeam = (player: Player, teamName: string) =>
   normalizeTeamNameWithAliases(player.team_name) === normalizeTeamNameWithAliases(teamName);
-
-const isPlaceholderTeam = (teamName: string) =>
-  /^(TBD|Winner |Loser |Runner-up |Third Place )/i.test(teamName.trim());
 
 const boolLabel = (value: boolean) => (value ? "Sim" : "Não");
 
@@ -66,15 +67,18 @@ export const PredictionScreen = ({
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const firstScorerDisabled = homeScore === 0 && awayScore === 0;
-  const predictionAccess = canSubmitPrediction(match, profile, new Date(), predictionLockMinutes);
+  const predictionAccess = canCreatePrediction(match, profile, new Date(), predictionLockMinutes);
+  const hasUndefinedTeams = hasUndefinedParticipant(match);
   const canSubmit = predictionAccess.allowed;
   const matchPlayers = players.filter((player) => isPlayerEligibleForMatch(player, match));
   const firstScorerCandidate = players.find((player) => player.id === firstScorerId) ?? null;
   const manOfMatchCandidate = players.find((player) => player.id === manOfMatchId) ?? null;
   const firstScorerPlayer = firstScorerCandidate && isPlayerEligibleForMatch(firstScorerCandidate, match) ? firstScorerCandidate : null;
   const manOfMatchPlayer = manOfMatchCandidate && isPlayerEligibleForMatch(manOfMatchCandidate, match) ? manOfMatchCandidate : null;
-  const homeTeamName = getTeamDisplayName(match.home_team);
-  const awayTeamName = getTeamDisplayName(match.away_team);
+  const homeTeamName = formatTeamDisplayName(match.home_team);
+  const awayTeamName = formatTeamDisplayName(match.away_team);
+  const homeSeedLabel = getSeedLabel(match.home_team);
+  const awaySeedLabel = getSeedLabel(match.away_team);
   const automaticWinner = predictionOutcome({ awayScore, homeScore });
   const automaticBothTeamsScore = homeScore > 0 && awayScore > 0;
   const automaticWinnerLabel = outcomeLabel(automaticWinner, homeTeamName, awayTeamName);
@@ -89,6 +93,7 @@ export const PredictionScreen = ({
 
   const validateBeforeSubmit = () => {
     if (!profile) return "Sessão expirada. Entre novamente.";
+    if (hasUndefinedTeams) return "Times ainda nao definidos para esta partida.";
     if (!canSubmit) return predictionAccess.message;
     if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) {
       return "Preencha o placar para enviar seu palpite.";
@@ -160,6 +165,15 @@ export const PredictionScreen = ({
           <Text style={styles.matchInfoText}>{formatDateTimePtBr(match.start_time)}</Text>
         </View>
 
+        {hasUndefinedTeams ? (
+          <View style={styles.undefinedTeamsBox}>
+            <Text style={styles.undefinedTeamsTitle}>Times ainda nao definidos para esta partida.</Text>
+            <Text style={styles.undefinedTeamsText}>
+              Aguarde a definicao dos classificados para enviar seu palpite.
+            </Text>
+          </View>
+        ) : null}
+
         {submitted ? (
           <View style={styles.confirmed}>
             <CheckCircle2 color={colors.gold} size={42} />
@@ -175,6 +189,7 @@ export const PredictionScreen = ({
                 logoUrl={match.home_team_logo_url}
                 onDec={() => setHomeScore((value) => clampPredictionScore(value - 1))}
                 onInc={() => setHomeScore((value) => clampPredictionScore(value + 1))}
+                seedLabel={homeSeedLabel}
                 teamName={match.home_team}
                 value={homeScore}
               />
@@ -184,6 +199,7 @@ export const PredictionScreen = ({
                 logoUrl={match.away_team_logo_url}
                 onDec={() => setAwayScore((value) => clampPredictionScore(value - 1))}
                 onInc={() => setAwayScore((value) => clampPredictionScore(value + 1))}
+                seedLabel={awaySeedLabel}
                 teamName={match.away_team}
                 value={awayScore}
               />
@@ -242,7 +258,7 @@ export const PredictionScreen = ({
               icon={<Send color={colors.black} size={18} />}
               loading={loading}
               onPress={submit}
-              title={canSubmit ? prediction ? "Salvar edição" : "Confirmar palpite" : predictionAccess.message}
+              title={canSubmit ? prediction ? "Salvar edição" : "Confirmar palpite" : hasUndefinedTeams ? "Times ainda nao definidos" : predictionAccess.message}
             />
           </>
         )}
@@ -254,6 +270,7 @@ export const PredictionScreen = ({
 const Stepper = ({
   label,
   logoUrl,
+  seedLabel,
   teamName,
   value,
   onDec,
@@ -261,6 +278,7 @@ const Stepper = ({
 }: {
   label: string;
   logoUrl?: string | null;
+  seedLabel?: string | null;
   teamName: string;
   value: number;
   onDec: () => void;
@@ -268,8 +286,9 @@ const Stepper = ({
 }) => (
   <View style={styles.teamSection}>
     <View style={styles.teamHeading}>
-      <TeamFlag logoUrl={logoUrl} name={teamName} size={30} />
+      <TeamFlag logoUrl={isKnockoutPlaceholder(teamName) ? null : logoUrl} name={label} size={30} />
       <Text numberOfLines={2} style={styles.teamName}>{label}</Text>
+      {seedLabel ? <Text numberOfLines={1} style={styles.seedLabel}>{seedLabel}</Text> : null}
     </View>
     <View style={styles.scoreControls}>
       <IconButton label={`Diminuir ${label}`} onPress={onDec}>
@@ -347,7 +366,7 @@ const PlayerPicker = ({
               {groups.map((group) => (
                 <View key={group.name} style={styles.playerGroup}>
                   <Text style={styles.playerGroupTitle}>{getTeamDisplayName(group.name)}</Text>
-                  {isPlaceholderTeam(group.name) ? (
+                  {isKnockoutPlaceholder(group.name) ? (
                     <Text style={styles.emptyPlayers}>Jogadores disponiveis apos definicao da equipe.</Text>
                   ) : group.players.length ? group.players.map((player) => {
                     const active = player.id === selectedPlayerId;
@@ -421,6 +440,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700"
   },
+  undefinedTeamsBox: {
+    backgroundColor: "rgba(212, 175, 55, 0.10)",
+    borderColor: "rgba(246, 211, 101, 0.22)",
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    gap: 4,
+    marginTop: spacing.md,
+    padding: spacing.sm
+  },
+  undefinedTeamsTitle: {
+    color: colors.gold,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  undefinedTeamsText: {
+    color: colors.mutedStrong,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 18
+  },
   confirmed: {
     alignItems: "center",
     backgroundColor: "rgba(11, 15, 25, 0.42)",
@@ -476,6 +515,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
     minHeight: 38,
+    textAlign: "center"
+  },
+  seedLabel: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: "800",
     textAlign: "center"
   },
   scoreControls: {

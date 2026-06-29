@@ -423,6 +423,74 @@ export const syncAutomaticMatches = async (_tournaments: Tournament[]) => {
   return payload;
 };
 
+export type KnockoutResolutionSummary = {
+  matchesChecked: number;
+  participantsPending: number;
+  participantsResolved: number;
+  participantsSkipped: number;
+  pending?: number;
+  resolved?: number;
+  skipped?: number;
+  warnings: string[];
+};
+
+export type BracketImportSummary = {
+  dryRun: boolean;
+  errors: Array<{ index: number; match_number?: number | null; message: string }>;
+  ok: boolean;
+  summary: {
+    invalid: number;
+    matchesToCreate: number;
+    matchesToUpdate: number;
+    received: number;
+    valid: number;
+  };
+};
+
+export const importKnockoutBracket = async (rawJson: string, dryRun: boolean) => {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error("Sessao administrativa expirada.");
+
+  const parsed = JSON.parse(rawJson) as Record<string, unknown>;
+  const response = await fetch("/api/admin/bracket/import", {
+    body: JSON.stringify({
+      ...parsed,
+      dryRun,
+    }),
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  const payload = (await response.json()) as BracketImportSummary & { error?: string };
+  if (!response.ok) throw new Error(payload.error ?? payload.errors?.[0]?.message ?? "Nao foi possivel importar a chave.");
+  return payload;
+};
+
+export const resolveKnockoutBracketNow = async (championship = "world_cup_2026") => {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error("Sessao administrativa expirada.");
+
+  const response = await fetch("/api/admin/resolve-knockout", {
+    body: JSON.stringify({ championship }),
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  const payload = (await response.json()) as { error?: string; ok?: boolean; summary?: KnockoutResolutionSummary; warnings?: string[] };
+  if (!response.ok || !payload.summary) throw new Error(payload.error ?? "Nao foi possivel resolver mata-mata.");
+  return payload;
+};
+
 export const updateAutomaticMatchStatuses = async () => {
   const { data, error } = await supabase.auth.getSession();
   if (error) throw error;
@@ -476,6 +544,8 @@ export type SyncResultsSummary = {
     finishedMatches: number;
     scoredPredictions: number;
     rankingUpdated: number;
+    knockoutResolution?: KnockoutResolutionSummary;
+    knockoutUpdated?: number;
     errorsCount: number;
   };
   changedMatches: Array<{ id: string; homeTeam: string; awayTeam: string; before: { status: string; score: string }; after: { status: string; score: string } }>;

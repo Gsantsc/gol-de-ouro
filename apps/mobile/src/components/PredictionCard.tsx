@@ -2,9 +2,12 @@ import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import type { Match, Player, Prediction, PredictionWinner } from "../shared";
 import {
   calculatePredictionBreakdown,
+  formatTeamDisplayName,
+  getSeedLabel,
   getPredictionStatusLabel,
   getPredictionStatusTone,
   getTeamDisplayName,
+  isKnockoutPlaceholder,
   isPlayerEligibleForMatch,
   predictionOutcome,
   type ExtraScoringStatus,
@@ -221,15 +224,21 @@ const TeamSide = ({
   name: string;
 }) => {
   const flagSize = compact ? 20 : 24;
-  const displayName = getTeamDisplayName(name);
+  const displayName = formatTeamDisplayName(name);
+  const seedLabel = getSeedLabel(name);
+  const unresolved = isKnockoutPlaceholder(name);
+  const logo = unresolved ? null : logoUrl;
 
   if (compact) {
     return (
       <View style={[styles.teamSide, styles.teamSideCompact]}>
-        <TeamFlag logoUrl={logoUrl} name={name} size={flagSize} />
-        <Text numberOfLines={2} style={[styles.teamName, styles.teamNameHome]}>
-          {displayName}
-        </Text>
+        <TeamFlag logoUrl={logo} name={displayName} size={flagSize} />
+        <View style={styles.teamTextStack}>
+          <Text numberOfLines={2} style={[styles.teamName, styles.teamNameHome]}>
+            {displayName}
+          </Text>
+          {seedLabel ? <Text numberOfLines={1} style={[styles.seedLabel, styles.teamNameHome]}>{seedLabel}</Text> : null}
+        </View>
       </View>
     );
   }
@@ -238,13 +247,19 @@ const TeamSide = ({
     <View style={[styles.teamSide, align === "home" ? styles.teamSideHome : styles.teamSideAway]}>
       {align === "home" ? (
         <>
-          <TeamFlag logoUrl={logoUrl} name={name} size={flagSize} />
-          <Text numberOfLines={2} style={[styles.teamName, styles.teamNameHome]}>{displayName}</Text>
+          <TeamFlag logoUrl={logo} name={displayName} size={flagSize} />
+          <View style={styles.teamTextStack}>
+            <Text numberOfLines={2} style={[styles.teamName, styles.teamNameHome]}>{displayName}</Text>
+            {seedLabel ? <Text numberOfLines={1} style={[styles.seedLabel, styles.teamNameHome]}>{seedLabel}</Text> : null}
+          </View>
         </>
       ) : (
         <>
-          <Text numberOfLines={2} style={[styles.teamName, styles.teamNameAway]}>{displayName}</Text>
-          <TeamFlag logoUrl={logoUrl} name={name} size={flagSize} />
+          <View style={styles.teamTextStack}>
+            <Text numberOfLines={2} style={[styles.teamName, styles.teamNameAway]}>{displayName}</Text>
+            {seedLabel ? <Text numberOfLines={1} style={[styles.seedLabel, styles.teamNameAway]}>{seedLabel}</Text> : null}
+          </View>
+          <TeamFlag logoUrl={logo} name={displayName} size={flagSize} />
         </>
       )}
     </View>
@@ -439,6 +454,11 @@ const styles = StyleSheet.create({
   teamSideAway: {
     justifyContent: "flex-end"
   },
+  teamTextStack: {
+    flexShrink: 1,
+    gap: 1,
+    minWidth: 0
+  },
   teamName: {
     color: colors.text,
     flexShrink: 1,
@@ -451,6 +471,12 @@ const styles = StyleSheet.create({
   },
   teamNameAway: {
     textAlign: "right"
+  },
+  seedLabel: {
+    color: colors.muted,
+    flexShrink: 1,
+    fontSize: 10,
+    fontWeight: "800"
   },
   scoreCenter: {
     alignItems: "center",

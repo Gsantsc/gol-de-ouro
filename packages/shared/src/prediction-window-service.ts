@@ -5,6 +5,7 @@ import {
   resolvePredictionWindow,
   type MatchStatusInput
 } from "./match-status-engine";
+import { hasUndefinedParticipant } from "./team-display";
 
 export type PredictionWindowState = "not_open" | "open" | "closed";
 
@@ -90,4 +91,21 @@ export const canSubmitPrediction = (
     message: predictionAccessMessages.open,
     state
   };
+};
+
+export const canCreatePrediction = (
+  match: MatchStatusInput & { home_team?: string | null; away_team?: string | null },
+  profile?: PredictionAccessProfile | null,
+  now = new Date(),
+  predictionLockMinutes?: number | null,
+): PredictionAccessResult => {
+  if (hasUndefinedParticipant(match)) {
+    return {
+      allowed: false,
+      message: "Times ainda nao definidos para esta partida.",
+      state: "closed"
+    };
+  }
+
+  return canSubmitPrediction(match, profile, now, predictionLockMinutes);
 };

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { updateMatchStatuses } from "@/lib/match-status-service";
+import { emptyKnockoutResolutionSummary, resolveKnockoutBracket } from "@/server/knockout-resolver";
 
 const requiredEnv = (name: string) => {
   const value = process.env[name];
@@ -63,12 +64,19 @@ export async function POST(request: NextRequest) {
     // LOCAL MATCH STATUS JOB - Use service role after admin validation
     const serviceSupabase = createServiceSupabaseClient();
     const result = await updateMatchStatuses(serviceSupabase);
+    let knockoutResolution = emptyKnockoutResolutionSummary();
+    try {
+      knockoutResolution = await resolveKnockoutBracket(serviceSupabase, "world_cup_2026");
+    } catch (error) {
+      knockoutResolution.warnings.push(error instanceof Error ? error.message : "Falha ao resolver mata-mata.");
+    }
     
     return NextResponse.json({
       success: true,
       action: "update-match-statuses",
       status: "success",
       checkedCount: result.checkedCount,
+      knockoutResolution,
       updatedCount: result.updated.length,
       byStatus: result.byStatus,
       updated: result.updated,

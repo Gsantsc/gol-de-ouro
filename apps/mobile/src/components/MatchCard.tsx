@@ -4,9 +4,12 @@ import { Clock, Lock, MapPin, RadioTower, Trophy } from "lucide-react-native";
 import type { Match, Prediction } from "../shared";
 import {
   calculateMatchStatus,
-  canSubmitPrediction,
+  canCreatePrediction,
   formatDateTimePtBr,
-  getTeamDisplayName,
+  formatTeamDisplayName,
+  getSeedLabel,
+  hasUndefinedParticipant,
+  isKnockoutPlaceholder,
   MATCH_STATUS_LABELS
 } from "../shared";
 import { TeamFlag } from "./TeamFlag";
@@ -56,17 +59,24 @@ const TeamColumn = ({
   name: string;
   logoUrl?: string | null;
 }) => {
-  const displayName = getTeamDisplayName(name);
+  const displayName = formatTeamDisplayName(name);
+  const seedLabel = getSeedLabel(name);
+  const unresolved = isKnockoutPlaceholder(name);
 
   return (
     <View style={[styles.teamColumn, align === "right" && styles.teamColumnRight]}>
-      <TeamFlag logoUrl={logoUrl} name={name} size={34} />
+      <TeamFlag logoUrl={unresolved ? null : logoUrl} name={displayName} size={34} />
       <Text
         numberOfLines={2}
         style={[styles.teamColumnName, align === "right" && styles.teamColumnNameRight]}
       >
         {displayName}
       </Text>
+      {seedLabel ? (
+        <Text numberOfLines={1} style={[styles.seedLabel, align === "right" && styles.seedLabelRight]}>
+          {seedLabel}
+        </Text>
+      ) : null}
     </View>
   );
 };
@@ -89,7 +99,8 @@ const MatchCardBase = ({
   predictionActionMode?: "enabled" | "redirect" | "hidden";
 }) => {
   const calculatedStatus = calculateMatchStatus(match, new Date(), predictionLockMinutes);
-  const predictionAccess = canSubmitPrediction(match, null, new Date(), predictionLockMinutes);
+  const predictionAccess = canCreatePrediction(match, null, new Date(), predictionLockMinutes);
+  const hasUndefinedTeams = hasUndefinedParticipant(match);
   const canEditOrPredict = predictionAccess.allowed;
   const city = cityForStadium(match.stadium);
   const statusLabel = MATCH_STATUS_LABELS[calculatedStatus];
@@ -101,10 +112,12 @@ const MatchCardBase = ({
   const showRedirectCta = canEditOrPredict || Boolean(onOpenPredictions);
   const primaryActionLabel = prediction
     ? canEditOrPredict ? "Editar palpite" : "Ver palpite"
-    : canEditOrPredict ? "Palpitar" : "Ver palpites";
+    : canEditOrPredict ? "Palpitar" : hasUndefinedTeams ? "Aguardando times" : "Ver palpites";
   const stateText = prediction
     ? canEditOrPredict ? "Enviado, ainda editavel" : "Enviado e fechado"
-    : canEditOrPredict
+    : hasUndefinedTeams
+      ? "Times ainda nao definidos"
+      : canEditOrPredict
       ? "Janela aberta"
       : predictionAccess.state === "not_open"
         ? "Abre 24h antes"
@@ -176,15 +189,15 @@ const MatchCardBase = ({
         {predictionActionMode === "hidden" ? null : showRedirectCta || predictionActionMode === "enabled" ? (
           <Pressable
             accessibilityRole="button"
-            disabled={!canEditOrPredict && !onOpenPredictions}
+            disabled={hasUndefinedTeams || (!canEditOrPredict && !onOpenPredictions)}
             onPress={handlePredictionPress}
             style={({ pressed }) => [
               styles.predictCta,
-              !canEditOrPredict && styles.predictCtaMuted,
+              (!canEditOrPredict || hasUndefinedTeams) && styles.predictCtaMuted,
               pressed && styles.predictCtaPressed
             ]}
           >
-            <Text style={[styles.predictCtaText, !canEditOrPredict && styles.predictCtaTextMuted]}>
+            <Text style={[styles.predictCtaText, (!canEditOrPredict || hasUndefinedTeams) && styles.predictCtaTextMuted]}>
               {primaryActionLabel}
             </Text>
           </Pressable>
@@ -279,6 +292,15 @@ const styles = StyleSheet.create({
     lineHeight: 17
   },
   teamColumnNameRight: {
+    textAlign: "right"
+  },
+  seedLabel: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: "800",
+    lineHeight: 13
+  },
+  seedLabelRight: {
     textAlign: "right"
   },
   scoreCenter: {

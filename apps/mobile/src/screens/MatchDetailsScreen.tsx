@@ -1,7 +1,14 @@
 import { StyleSheet, Text, View } from "react-native";
 import { ArrowLeft, EyeOff } from "lucide-react-native";
 import type { Match, Prediction } from "../shared";
-import { EVENT_LABELS, formatFullDatePtBr, getTeamDisplayName, MATCH_STATUS_LABELS } from "../shared";
+import {
+  EVENT_LABELS,
+  formatFullDatePtBr,
+  formatTeamDisplayName,
+  getSeedLabel,
+  isKnockoutPlaceholder,
+  MATCH_STATUS_LABELS
+} from "../shared";
 import { TeamFlag } from "../components/TeamFlag";
 import { StatGrid } from "../components/StatGrid";
 import { useMatchDetails } from "../hooks/useMatchDetails";
@@ -21,6 +28,11 @@ export const MatchDetailsScreen = ({
 }) => {
   const { events, predictions, stats } = useMatchDetails(match.id);
   const showPublicPredictions = match.status === "encerrado";
+  const homeUndefined = isKnockoutPlaceholder(match.home_team);
+  const awayUndefined = isKnockoutPlaceholder(match.away_team);
+  const hasUndefinedTeams = homeUndefined || awayUndefined;
+  const homeSeedLabel = getSeedLabel(match.home_team);
+  const awaySeedLabel = getSeedLabel(match.away_team);
 
   return (
     <Screen>
@@ -40,8 +52,9 @@ export const MatchDetailsScreen = ({
         </View>
         <View style={styles.scoreLine}>
           <View style={styles.teamSide}>
-            <TeamFlag logoUrl={match.home_team_logo_url} name={match.home_team} size={34} />
-            <Text style={styles.team}>{getTeamDisplayName(match.home_team)}</Text>
+            <TeamFlag logoUrl={homeUndefined ? null : match.home_team_logo_url} name={formatTeamDisplayName(match.home_team)} size={34} />
+            <Text style={styles.team}>{formatTeamDisplayName(match.home_team)}</Text>
+            {homeSeedLabel ? <Text style={styles.seedLabel}>{homeSeedLabel}</Text> : null}
           </View>
           <View style={styles.scoreBox}>
             <Text style={styles.score}>{match.home_score}</Text>
@@ -49,17 +62,24 @@ export const MatchDetailsScreen = ({
             <Text style={styles.score}>{match.away_score}</Text>
           </View>
           <View style={[styles.teamSide, styles.teamSideRight]}>
-            <TeamFlag logoUrl={match.away_team_logo_url} name={match.away_team} size={34} />
-            <Text style={[styles.team, styles.teamRight]}>{getTeamDisplayName(match.away_team)}</Text>
+            <TeamFlag logoUrl={awayUndefined ? null : match.away_team_logo_url} name={formatTeamDisplayName(match.away_team)} size={34} />
+            <Text style={[styles.team, styles.teamRight]}>{formatTeamDisplayName(match.away_team)}</Text>
+            {awaySeedLabel ? <Text style={[styles.seedLabel, styles.seedLabelRight]}>{awaySeedLabel}</Text> : null}
           </View>
         </View>
+        {hasUndefinedTeams ? (
+          <View style={styles.undefinedTeamsBox}>
+            <Text style={styles.undefinedTeamsTitle}>Times ainda nao definidos para esta partida.</Text>
+            <Text style={styles.undefinedTeamsText}>Aguarde a definicao dos classificados para enviar seu palpite.</Text>
+          </View>
+        ) : null}
         {myPrediction ? (
           <View style={styles.mineBox}>
             <Text style={styles.mine}>Palpite enviado</Text>
             <Text style={styles.mineHint}>Detalhes completos ficam na aba Palpites.</Text>
           </View>
         ) : (
-          <AppButton title="Enviar palpite" onPress={onPredict} />
+          <AppButton disabled={hasUndefinedTeams} title={hasUndefinedTeams ? "Times ainda nao definidos" : "Enviar palpite"} onPress={onPredict} />
         )}
       </Card>
 
@@ -144,6 +164,15 @@ const styles = StyleSheet.create({
   teamRight: {
     textAlign: "right"
   },
+  seedLabel: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: "800",
+    textAlign: "center"
+  },
+  seedLabelRight: {
+    textAlign: "right"
+  },
   scoreBox: {
     alignItems: "center",
     backgroundColor: colors.background,
@@ -166,6 +195,26 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 16,
     fontWeight: "900"
+  },
+  undefinedTeamsBox: {
+    backgroundColor: "rgba(212, 175, 55, 0.10)",
+    borderColor: "rgba(246, 211, 101, 0.22)",
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    gap: 4,
+    marginBottom: spacing.md,
+    padding: spacing.sm
+  },
+  undefinedTeamsTitle: {
+    color: colors.gold,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  undefinedTeamsText: {
+    color: colors.mutedStrong,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 18
   },
   mine: {
     color: colors.gold,

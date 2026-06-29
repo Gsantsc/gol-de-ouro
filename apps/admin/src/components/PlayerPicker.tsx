@@ -33,8 +33,35 @@ const normalize = (value: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
-const matchTeam = (player: Player, teamName: string) =>
-  normalizeTeamNameWithAliases(player.team_name) === normalizeTeamNameWithAliases(teamName);
+const normalizeCode = (value?: string | null) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "");
+
+const matchTeam = (player: Player, teamName: string, teamCode?: string | null) => {
+  if (teamCode && player.team_code && normalizeCode(player.team_code) === normalizeCode(teamCode)) return true;
+  return normalizeTeamNameWithAliases(player.team_name) === normalizeTeamNameWithAliases(teamName);
+};
+
+const isPlaceholderTeam = (teamName?: string | null) => {
+  const raw = String(teamName ?? "").trim();
+  if (!raw) return true;
+  const normalized = normalize(raw).replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+  const compact = raw.toUpperCase().replace(/\s+/g, "");
+  if (/^(W|L)\d{1,3}(?:\/(?:W|L)?\d{1,3})*$/.test(compact)) return true;
+  return [
+    "a definir",
+    "tbd",
+    "to be determined",
+    "winner match",
+    "winner group",
+    "runner up group",
+    "third place group",
+    "loser match",
+  ].some((pattern) => normalized.includes(pattern));
+};
 
 const normalizePositionGroup = (value?: string | null): PositionGroupKey | null => {
   const normalized = String(value ?? "").trim().toUpperCase();
@@ -111,16 +138,16 @@ export const PlayerPicker = ({
   const [query, setQuery] = useState("");
   const selectedPlayer = players.find((player) => player.id === selectedPlayerId) ?? null;
   const groups = useMemo(() => {
-    const filtered = (teamName: string) =>
+    const filtered = (teamName: string, teamCode?: string | null) =>
       players
-        .filter((player) => player.active && matchTeam(player, teamName))
+        .filter((player) => player.active && matchTeam(player, teamName, teamCode))
         .filter((player) => normalize(`${player.name} ${player.position ?? ""} ${player.position_group ?? ""}`).includes(normalize(query)));
 
     return [
-      { name: match.home_team, positionGroups: groupByPosition(filtered(match.home_team)) },
-      { name: match.away_team, positionGroups: groupByPosition(filtered(match.away_team)) }
+      { code: match.home_team_code, name: match.home_team, positionGroups: groupByPosition(filtered(match.home_team, match.home_team_code)) },
+      { code: match.away_team_code, name: match.away_team, positionGroups: groupByPosition(filtered(match.away_team, match.away_team_code)) }
     ];
-  }, [match.away_team, match.home_team, players, query]);
+  }, [match.away_team, match.away_team_code, match.home_team, match.home_team_code, players, query]);
 
   const display = playerLabel(selectedPlayer);
 
@@ -207,7 +234,9 @@ export const PlayerPicker = ({
                       </div>
                     ) : (
                       <p className="rounded-md border border-dashed border-pitch-600 px-3 py-3 text-sm font-bold text-white/45">
-                        Nenhum jogador encontrado.
+                        {!query.trim() && !isPlaceholderTeam(group.name)
+                          ? "Elenco ainda não sincronizado. Use 'Sincronizar jogadores' no Admin."
+                          : "Nenhum jogador encontrado."}
                       </p>
                     )}
                   </section>

@@ -23,6 +23,11 @@ import {
   resolveKnockoutParticipants,
   type KnockoutResolutionSummary
 } from "@/server/knockout-resolver";
+import {
+  WORLD_CUP_2026_KNOCKOUT_FIXTURES,
+  getKnockoutFixture,
+  isKnockoutPlaceholder as isKnockoutPlaceholderFixture
+} from "@/server/world-cup-2026-knockout-fixtures";
 
 type SyncSummary = {
   insertedCount: number;
@@ -721,6 +726,77 @@ const readPredictionLockMinutes = async (supabase: SupabaseClient) => {
   return [60, 90, 120, 180].includes(value) ? value : 60;
 };
 
+// Backfill knockout matches 73-88 with real teams from official fixtures
+const backfillKnockoutFixtures = async (supabase: SupabaseClient): Promise<{ updated: number; skipped: number }> => {
+  logSync("KNOCKOUT BACKFILL START: Checking matches 73-88");
+
+  let updated = 0;
+  let skipped = 0;
+
+  for (const fixture of WORLD_CUP_2026_KNOCKOUT_FIXTURES) {
+    const { data: existingMatch, error } = await supabase
+      .from("matches")
+      .select("id, home_team, away_team, home_team_code, away_team_code, home_original_placeholder, away_original_placeholder")
+      .eq("championship", "world_cup_2026")
+      .eq("match_number", fixture.matchNumber)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (error) {
+      logSync(`KNOCKOUT BACKFILL ERROR: Failed to check match ${fixture.matchNumber} - ${error.message}`, "error");
+      continue;
+    }
+
+    if (!existingMatch) {
+      logSync(`KNOCKOUT BACKFILL SKIP: Match ${fixture.matchNumber} not found in database`);
+      skipped++;
+      continue;
+    }
+
+    // Check if current teams are placeholders
+    const homeIsPlaceholder = isKnockoutPlaceholderFixture(existingMatch.home_team ?? "");
+    const awayIsPlaceholder = isKnockoutPlaceholderFixture(existingMatch.away_team ?? "");
+
+    if (!homeIsPlaceholder && !awayIsPlaceholder) {
+      logSync(`KNOCKOUT BACKFILL SKIP: Match ${fixture.matchNumber} already has real teams`);
+      skipped++;
+      continue;
+    }
+
+    // Preserve original placeholder before updating
+    const homeOriginalPlaceholder = homeIsPlaceholder ? existingMatch.home_team : existingMatch.home_original_placeholder;
+    const awayOriginalPlaceholder = awayIsPlaceholder ? existingMatch.away_team : existingMatch.away_original_placeholder;
+
+    // Update with real teams from fixture
+    const { error: updateError } = await supabase
+      .from("matches")
+      .update({
+        home_team: fixture.homeTeam,
+        away_team: fixture.awayTeam,
+        home_team_code: fixture.homeTeamCode,
+        away_team_code: fixture.awayTeamCode,
+        bracket_phase: fixture.bracketPhase,
+        bracket_order: fixture.bracketOrder,
+        is_bracket_validated: true,
+        bracket_validation_error: null,
+        home_original_placeholder: homeOriginalPlaceholder,
+        away_original_placeholder: awayOriginalPlaceholder,
+      })
+      .eq("id", existingMatch.id);
+
+    if (updateError) {
+      logSync(`KNOCKOUT BACKFILL ERROR: Failed to update match ${fixture.matchNumber} - ${updateError.message}`, "error");
+      continue;
+    }
+
+    logSync(`KNOCKOUT BACKFILL SUCCESS: Updated match ${fixture.matchNumber} with ${fixture.homeTeam} vs ${fixture.awayTeam}`);
+    updated++;
+  }
+
+  logSync(`KNOCKOUT BACKFILL COMPLETE: ${updated} updated, ${skipped} skipped`);
+  return { updated, skipped };
+};
+
 // LEAGUE AUDIT - API FOOTBALL LEAGUE MAP
 // API-FOOTBALL INTEGRATION
 // League IDs for API-Football
@@ -840,7 +916,11 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary & { starte
   }
 
   logSync(`SYNC FIXTURES COMPLETE: ${insertedCount} inserted, ${updatedCount} updated`);
-  
+
+  // Backfill knockout matches 73-88 with real teams
+  const backfillResult = await backfillKnockoutFixtures(supabase);
+  logSync(`KNOCKOUT BACKFILL RESULT: ${backfillResult.updated} matches updated, ${backfillResult.skipped} skipped`);
+
   // Calculate knockout sync metrics from provider matches
   const knockoutMatches = providerMatches.filter(m => m.bracketPhase && m.bracketPhase !== "group_stage");
   const realTeamsFromEspn = knockoutMatches.filter(m => !isKnockoutPlaceholder(m.homeTeam) && !isKnockoutPlaceholder(m.awayTeam)).length;
@@ -964,6 +1044,7 @@ export async function POST(request: NextRequest) {
         teamsSynced: result.teamsSynced,
         cacheHits: result.cacheHits,
         cacheMisses: result.cacheMisses,
+        rosterSyncRecommended: true,
       },
       changedMatches: [],
       errors: [],

@@ -67,8 +67,10 @@ import {
   softRemoveUser,
   suspendUser,
   syncAutomaticMatches,
+  syncRosters,
   syncResultsNow,
   type SyncResultsSummary,
+  type SyncRostersResponse,
   toggleTournament,
   updateAutomaticMatchStatuses,
   updatePredictionLockMinutes,
@@ -1060,6 +1062,7 @@ const MatchesPanel = ({
   const [drafts, setDrafts] = useState<Record<string, MatchDraft>>({});
   const [density, setDensity] = useState<MatchDensity>("comfortable");
   const [lastResultsSyncSummary, setLastResultsSyncSummary] = useState<SyncResultsSummary | null>(null);
+  const [lastRosterSyncSummary, setLastRosterSyncSummary] = useState<SyncRostersResponse | null>(null);
   const [lastRecalculateSummary, setLastRecalculateSummary] = useState<RecalculatePredictionsSummary | null>(null);
   const [lastStatusUpdateSummary, setLastStatusUpdateSummary] = useState<{ checkedCount?: number; updatedCount?: number; byStatus?: Record<string, number>; knockoutResolution?: KnockoutResolutionSummary } | null>(null);
   const [lastKnockoutResolution, setLastKnockoutResolution] = useState<KnockoutResolutionSummary | null>(null);
@@ -1183,6 +1186,16 @@ const MatchesPanel = ({
         { label: "Palpites pontuados", value: lastResultsSyncSummary.summary.scoredPredictions },
         { label: "Ranking atualizado", value: lastResultsSyncSummary.summary.rankingUpdated },
         { label: "Mata-mata resolvido", value: lastResultsSyncSummary.summary.knockoutUpdated ?? lastResultsSyncSummary.summary.knockoutResolution?.participantsResolved ?? 0 }
+      ]
+    : [];
+  const rosterSummaryItems = lastRosterSyncSummary
+    ? [
+        { label: "Times verificados", value: lastRosterSyncSummary.summary.teamsChecked },
+        { label: "Times sincronizados", value: lastRosterSyncSummary.summary.teamsSynced },
+        { label: "Jogadores encontrados", value: lastRosterSyncSummary.summary.playersFetched },
+        { label: "Jogadores atualizados", value: lastRosterSyncSummary.summary.playersUpserted },
+        { label: "Elencos vinculados", value: lastRosterSyncSummary.summary.rostersUpserted },
+        { label: "Times com aviso", value: lastRosterSyncSummary.summary.teamsFailed }
       ]
     : [];
 
@@ -1315,6 +1328,7 @@ const MatchesPanel = ({
                   <p className="text-sm font-black uppercase tracking-normal text-gold">Executando ação</p>
                   <p className="mt-1 text-xs text-white/55">
                     {actionKey === "sync-matches" && "Sincronizando jogos..."}
+                    {actionKey === "sync-rosters" && "Sincronizando jogadores..."}
                     {actionKey === "sync-results" && "Atualizando resultados ESPN..."}
                     {actionKey === "recalculate-predictions" && "Recalculando pontuação..."}
                     {actionKey === "update-status" && "Atualizando status das partidas..."}
@@ -1329,6 +1343,62 @@ const MatchesPanel = ({
             </p>
           </div>
         )}
+
+        <div className="mt-5 rounded-lg border border-white/10 bg-pitch-900/45 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-sm font-black uppercase tracking-normal text-gold">Elencos / Jogadores</p>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-white/60">
+                Os jogadores são sincronizados automaticamente pelo provider com base nos times reais já definidos nos jogos. Não é necessário importar JSON.
+              </p>
+            </div>
+            <button
+              className="btn-primary"
+              disabled={busy || Boolean(actionKey)}
+              onClick={() =>
+                onAction(async () => {
+                  const summary = await syncRosters({ championship: "world_cup_2026" });
+                  setLastRosterSyncSummary(summary);
+                  return summary;
+                }, {
+                  loadingKey: "sync-rosters",
+                  successMessage: "Jogadores sincronizados."
+                })
+              }
+            >
+              {actionKey === "sync-rosters" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Sincronizando jogadores...
+                </>
+              ) : (
+                <>
+                  <Users className="h-4 w-4" />
+                  Sincronizar jogadores
+                </>
+              )}
+            </button>
+          </div>
+
+          {lastRosterSyncSummary && (
+            <div className="mt-4">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+                {rosterSummaryItems.map((item) => (
+                  <div className="rounded-md border border-white/10 bg-white/[0.03] p-3" key={item.label}>
+                    <p className="text-lg font-black text-white">{item.value ?? 0}</p>
+                    <p className="mt-1 text-xs font-bold text-white/50">{item.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {lastRosterSyncSummary.summary.warnings.length > 0 && (
+                <pre className="mt-3 max-h-44 overflow-auto rounded-md border border-gold/30 bg-gold/10 p-3 text-xs font-bold leading-5 text-gold">
+                  {lastRosterSyncSummary.summary.warnings.join("\n")}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="mt-5 rounded-lg border border-white/10 bg-pitch-900/45 p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -2128,7 +2198,7 @@ const OfficialExtrasModal = ({
 
         {!loading && !rosterWarning && !hasOfficialPlayers && (
           <div className="mt-4 rounded-md border border-gold/35 bg-gold/10 p-3 text-sm font-bold leading-6 text-gold">
-            Nenhum jogador oficial encontrado para os times desta partida. Cadastre o elenco oficial desta competição antes de preencher jogador.
+            Elenco ainda não sincronizado. Use 'Sincronizar jogadores' no Admin.
           </div>
         )}
 

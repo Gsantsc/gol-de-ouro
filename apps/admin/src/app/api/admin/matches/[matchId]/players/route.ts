@@ -47,7 +47,7 @@ const ROSTER_SELECT =
 const MATCH_SELECT_WITH_CODES = "id,home_team,away_team,home_team_code,away_team_code,championship,status";
 const MATCH_SELECT_BASE = "id,home_team,away_team,championship,status";
 const NO_REGISTERED_ROSTER_WARNING =
-  "Nenhum elenco oficial cadastrado para esta competicao. Cadastre o roster antes de preencher extras oficiais.";
+  "Elenco ainda nao sincronizado. Use 'Sincronizar jogadores' no Admin.";
 const POSITION_ORDER = new Map([
   ["GOL", 0],
   ["DEF", 1],

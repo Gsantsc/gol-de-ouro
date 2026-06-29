@@ -37,6 +37,7 @@ export type Player = {
   roster_order?: number | null;
   active: boolean;
   source?: string | null;
+  provider_external_id?: string | null;
   source_updated_at?: string | null;
   external_id?: string | null;
   created_at?: string;

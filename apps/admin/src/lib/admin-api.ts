@@ -418,9 +418,60 @@ export const syncAutomaticMatches = async (_tournaments: Tournament[]) => {
     method: "POST"
   });
 
-  const payload = (await response.json()) as { error?: string; success?: boolean; action?: string; provider?: string; status?: string; startedAt?: string; finishedAt?: string; durationMs?: number; summary?: { checkedMatches?: number; insertedMatches?: number; updatedMatches?: number; skippedMatches?: number; liveMatches?: number; finishedMatches?: number; scoredPredictions?: number; rankingUpdated?: number; teamsSynced?: number; cacheHits?: number; cacheMisses?: number } };
+  const payload = (await response.json()) as { error?: string; success?: boolean; action?: string; provider?: string; status?: string; startedAt?: string; finishedAt?: string; durationMs?: number; summary?: { checkedMatches?: number; insertedMatches?: number; updatedMatches?: number; skippedMatches?: number; liveMatches?: number; finishedMatches?: number; scoredPredictions?: number; rankingUpdated?: number; teamsSynced?: number; cacheHits?: number; cacheMisses?: number; rosterSyncRecommended?: boolean } };
   if (!response.ok) throw new Error(payload.error ?? "Não foi possível sincronizar partidas.");
   return payload;
+};
+
+export type SyncRostersResponse = {
+  championship: string;
+  ok: boolean;
+  summary: {
+    playersFetched: number;
+    playersUpserted: number;
+    rostersUpserted: number;
+    teamsChecked: number;
+    teamsFailed: number;
+    teamsSynced: number;
+    warnings: string[];
+  };
+  teams: Array<{
+    playersFetched: number;
+    playersUpserted: number;
+    rostersUpserted: number;
+    source: string | null;
+    team_code: string;
+    team_name: string;
+    warnings: string[];
+  }>;
+};
+
+export const syncRosters = async (payload: {
+  championship?: string;
+  team_codes?: string[];
+} = {}): Promise<SyncRostersResponse> => {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error("Sessao administrativa expirada.");
+
+  const response = await fetch("/api/admin/sync-rosters", {
+    body: JSON.stringify({
+      championship: payload.championship ?? "world_cup_2026",
+      ...(payload.team_codes?.length ? { team_codes: payload.team_codes } : {}),
+    }),
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  const responsePayload = (await response.json()) as SyncRostersResponse & { error?: string };
+  if (!response.ok) {
+    throw new Error(responsePayload.error ?? "Nao foi possivel sincronizar jogadores.");
+  }
+  return responsePayload;
 };
 
 export type KnockoutResolutionSummary = {

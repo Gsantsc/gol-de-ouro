@@ -1063,6 +1063,7 @@ const MatchesPanel = ({
   const [density, setDensity] = useState<MatchDensity>("comfortable");
   const [lastResultsSyncSummary, setLastResultsSyncSummary] = useState<SyncResultsSummary | null>(null);
   const [lastRosterSyncSummary, setLastRosterSyncSummary] = useState<SyncRostersResponse | null>(null);
+  const [rosterSyncOffset, setRosterSyncOffset] = useState(0);
   const [lastRecalculateSummary, setLastRecalculateSummary] = useState<RecalculatePredictionsSummary | null>(null);
   const [lastStatusUpdateSummary, setLastStatusUpdateSummary] = useState<{ checkedCount?: number; updatedCount?: number; byStatus?: Record<string, number>; knockoutResolution?: KnockoutResolutionSummary } | null>(null);
   const [lastKnockoutResolution, setLastKnockoutResolution] = useState<KnockoutResolutionSummary | null>(null);
@@ -1357,8 +1358,13 @@ const MatchesPanel = ({
               disabled={busy || Boolean(actionKey)}
               onClick={() =>
                 onAction(async () => {
-                  const summary = await syncRosters({ championship: "world_cup_2026" });
+                  const summary = await syncRosters({
+                    championship: "world_cup_2026",
+                    limit: 8,
+                    offset: rosterSyncOffset
+                  });
                   setLastRosterSyncSummary(summary);
+                  setRosterSyncOffset(summary.hasMore ? summary.nextOffset : 0);
                   return summary;
                 }, {
                   loadingKey: "sync-rosters",
@@ -1382,6 +1388,11 @@ const MatchesPanel = ({
 
           {lastRosterSyncSummary && (
             <div className="mt-4">
+              {(lastRosterSyncSummary.hasMore || lastRosterSyncSummary.summary.hasMore) && (
+                <div className="mb-3 rounded-md border border-gold/30 bg-gold/10 p-3 text-sm font-bold leading-6 text-gold">
+                  Sincronização parcial concluída. Clique novamente para continuar.
+                </div>
+              )}
               {lastRosterSyncSummary.summary.teamsChecked > 0 && lastRosterSyncSummary.summary.playersFetched === 0 && (
                 <div className="mb-3 rounded-md border border-gold/30 bg-gold/10 p-3 text-sm font-bold leading-6 text-gold">
                   Times encontrados, mas nenhum elenco retornou do provider. A API-Football respondeu sem teamId/squad para estas seleções e o ESPN não retornou roster confiável.

@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
+  API_FOOTBALL_KEY_NOT_RECEIVED_WARNING,
+  API_FOOTBALL_MISSING_RUNTIME_KEY_WARNING,
   RosterProviderError,
   checkApiFootballStatus,
   fetchTeamRoster,
   getTeamsNeedingRoster,
   inferPositionGroup,
+  isApiFootballMissingApplicationKeyError,
+  normalizeApiFootballKey,
   type ApiFootballStatusDebug,
   type ProviderRosterPlayer,
   type TeamNeedingRoster,
@@ -14,6 +18,8 @@ import { createServiceSupabaseClient } from "@/server/sync-results";
 
 type SyncRostersPayload = {
   championship?: unknown;
+  limit?: unknown;
+  offset?: unknown;
   team_codes?: unknown;
 };
 
@@ -107,9 +113,6 @@ const assertApprovedAdmin = async (accessToken: string) => {
   );
 };
 
-const errorResponse = (message: string, status = 400) =>
-  NextResponse.json({ error: message, ok: false }, { status });
-
 const readOptionalString = (value: unknown) => {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -153,6 +156,12 @@ const readTeamCodes = (value: unknown) => {
   }));
 
   return codes.length ? codes : null;
+};
+
+const readBoundedInteger = (value: unknown, fallback: number, min: number, max: number) => {
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isInteger(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
 };
 
 const exactNameMatch = (left?: string | null, right?: string | null) =>
@@ -436,39 +445,53 @@ export async function POST(request: NextRequest) {
   try {
     const accessToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
     if (!accessToken) {
-      return NextResponse.json({ error: "Token de autorizacao nao enviado." }, { status: 401 });
+      return NextResponse.json({ error: "Token de autorizacao nao enviado.", ok: false }, { status: 401 });
     }
 
     if (!await assertApprovedAdmin(accessToken)) {
-      return NextResponse.json({ error: "Token invalido ou admin nao aprovado." }, { status: 403 });
+      return NextResponse.json({ error: "Token invalido ou admin nao aprovado.", ok: false }, { status: 403 });
     }
 
     const body = await request.json().catch(() => ({})) as SyncRostersPayload;
     const championship = readOptionalString(body.championship) ?? DEFAULT_CHAMPIONSHIP;
+    const limit = readBoundedInteger(body.limit, 8, 1, 8);
+    const requestedOffset = readBoundedInteger(body.offset, 0, 0, 10_000);
     const teamCodes = readTeamCodes(body.team_codes);
     const supabase = createServiceSupabaseClient();
     const warnings: string[] = [];
     const debug: SyncRostersDebug = {};
-    if (process.env.API_FOOTBALL_KEY) {
+    const apiFootballKey = normalizeApiFootballKey(process.env.API_FOOTBALL_KEY);
+    if (apiFootballKey) {
       try {
-        const apiFootballStatus = await checkApiFootballStatus(process.env.API_FOOTBALL_KEY);
+        const apiFootballStatus = await checkApiFootballStatus(apiFootballKey);
         debug.apiFootballStatus = apiFootballStatus;
         if (hasProviderErrors(apiFootballStatus?.errors)) {
           warnings.push(`API-Football errors (/status): ${JSON.stringify(apiFootballStatus?.errors)}`);
         }
+        if (isApiFootballMissingApplicationKeyError(apiFootballStatus?.errors)) {
+          warnings.push(API_FOOTBALL_KEY_NOT_RECEIVED_WARNING);
+        }
       } catch {
         warnings.push("Nao foi possivel validar status da API-Football.");
       }
+    } else {
+      warnings.push(API_FOOTBALL_MISSING_RUNTIME_KEY_WARNING);
     }
 
     const teamsFromMatches = await getTeamsNeedingRoster(supabase, championship, warnings);
-    const teams = teamCodes
+    const candidateTeams = teamCodes
       ? teamsFromMatches.filter((team) => teamCodes.includes(normalizeCode(team.team_code)))
       : teamsFromMatches;
+    const offset = requestedOffset < candidateTeams.length ? requestedOffset : 0;
+    const teams = candidateTeams.slice(offset, offset + limit);
+    const processedTeams = teams.length;
+    const nextOffset = offset + processedTeams;
+    const remainingTeams = Math.max(0, candidateTeams.length - nextOffset);
+    const hasMore = remainingTeams > 0;
 
     if (teamsFromMatches.length === 0) {
       warnings.push(`Nenhum time real encontrado em partidas de ${championship}.`);
-    } else if (teamCodes && teams.length === 0) {
+    } else if (teamCodes && candidateTeams.length === 0) {
       warnings.push(`Nenhum dos team_codes solicitados foi encontrado em partidas de ${championship}.`);
     }
 
@@ -482,9 +505,12 @@ export async function POST(request: NextRequest) {
     const summary = {
       debug,
       globalWarnings: uniqueWarnings(warnings),
+      hasMore,
       playersFetched: teamResults.reduce((sum, team) => sum + team.playersFetched, 0),
       playersUpserted: teamResults.reduce((sum, team) => sum + team.playersUpserted, 0),
+      processedTeams,
       rostersUpserted: teamResults.reduce((sum, team) => sum + team.rostersUpserted, 0),
+      remainingTeams,
       teamsChecked: teams.length,
       teamsFailed: teamResults.filter((team) => team.playersFetched === 0 || team.rostersUpserted === 0).length,
       teamsSynced: teamResults.filter((team) => team.rostersUpserted > 0).length,
@@ -500,17 +526,21 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       championship,
+      hasMore,
+      nextOffset,
       ok: true,
+      processedTeams,
+      remainingTeams,
       summary,
       teams: teamResults,
     });
   } catch (error) {
-    if (error instanceof Error && /team_codes/.test(error.message)) {
-      return errorResponse(error.message);
-    }
-
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Erro ao sincronizar elencos.", ok: false },
+      {
+        ok: false,
+        error: "Falha ao sincronizar elencos.",
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 },
     );
   }

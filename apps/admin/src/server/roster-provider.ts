@@ -152,6 +152,9 @@ const API_FOOTBALL_SOURCE = "api-football-roster-sync";
 const ESPN_SOURCE = "espn-roster-sync";
 const DEFAULT_TIMEOUT_MS = 25000;
 const POSITION_GROUPS = new Set<PositionGroup>(["GOL", "DEF", "MEI", "ATA", "RS"]);
+export const API_FOOTBALL_MISSING_RUNTIME_KEY_WARNING = "API_FOOTBALL_KEY ausente no runtime do Admin.";
+export const API_FOOTBALL_KEY_NOT_RECEIVED_WARNING = "API-Football não recebeu a chave. Verifique se API_FOOTBALL_KEY está configurada em Production no projeto gol-de-ouro-admin e se houve redeploy.";
+let apiFootballKeyDetectionLogged = false;
 
 const WC2026_TEAM_CODE_ALIASES: Record<string, string> = {
   "south africa": "RSA",
@@ -209,15 +212,6 @@ const ESPN_CODE_ALIASES: Record<string, string[]> = {
   CPV: ["CPV", "CV"],
   RSA: ["RSA", "SA"],
   MAR: ["MAR", "MOR"],
-};
-
-const leagueIds: Record<string, number> = {
-  brasileirao_a: 71,
-  champions_league: 2,
-  copa_do_brasil: 73,
-  libertadores: 13,
-  sul_americana: 11,
-  world_cup_2026: 1,
 };
 
 export class RosterProviderError extends Error {
@@ -292,10 +286,19 @@ const toPositiveInteger = (value: unknown, min = 1, max = Number.MAX_SAFE_INTEGE
 const getApiFootballBaseUrl = () =>
   process.env.API_FOOTBALL_BASE_URL || "https://v3.football.api-sports.io";
 
-const seasonForChampionship = (championship: string) => {
-  const envSeason = Number(process.env.API_FOOTBALL_ROSTER_SEASON ?? process.env.API_FOOTBALL_SEASON);
-  if (Number.isInteger(envSeason) && envSeason > 1900) return envSeason;
-  return championship === "world_cup_2026" ? 2026 : 2026;
+export const normalizeApiFootballKey = (apiKey?: string | null) => {
+  const normalizedApiKey = apiKey?.trim();
+  return normalizedApiKey || null;
+};
+
+const addUniqueWarning = (warnings: string[], warning: string) => {
+  if (!warnings.includes(warning)) warnings.push(warning);
+};
+
+const logApiFootballKeyDetectedOnce = () => {
+  if (apiFootballKeyDetectionLogged) return;
+  apiFootballKeyDetectionLogged = true;
+  console.info(`[ROSTER ${new Date().toISOString()}] API_FOOTBALL_KEY detectada no runtime: true`);
 };
 
 const readJsonMap = (envNames: string[]) => {
@@ -378,6 +381,9 @@ const compactJson = (value: unknown) => {
   }
 };
 
+export const isApiFootballMissingApplicationKeyError = (errors: unknown) =>
+  /missing application key/i.test(compactJson(errors));
+
 const addApiFootballStatusWarning = (httpStatus: number, warnings: string[]) => {
   if (httpStatus === 401 || httpStatus === 403) {
     warnings.push("API-Football recusou a requisicao. Verifique chave/plano/permissao.");
@@ -388,12 +394,22 @@ const addApiFootballStatusWarning = (httpStatus: number, warnings: string[]) => 
 
 const fetchApiFootballEnvelope = async <Result,>(
   url: URL,
-  apiKey: string,
+  apiKey: string | null | undefined,
   label: string,
   warnings: string[],
 ) => {
+  const normalizedApiKey = normalizeApiFootballKey(apiKey);
+  if (!normalizedApiKey) {
+    addUniqueWarning(warnings, API_FOOTBALL_MISSING_RUNTIME_KEY_WARNING);
+    return {
+      envelope: null,
+      httpStatus: 0,
+    };
+  }
+
+  logApiFootballKeyDetectedOnce();
   const response = await fetch(url.toString(), {
-    headers: apiFootballHeaders(apiKey),
+    headers: apiFootballHeaders(normalizedApiKey),
     signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
   });
   const httpStatus = response.status;
@@ -447,11 +463,13 @@ const apiFootballEnvelopeDebug = <T,>(
 export const checkApiFootballStatus = async (
   apiKey = process.env.API_FOOTBALL_KEY,
 ): Promise<ApiFootballStatusDebug | null> => {
-  if (!apiKey) return null;
+  const normalizedApiKey = normalizeApiFootballKey(apiKey);
+  if (!normalizedApiKey) return null;
 
   const url = new URL(`${getApiFootballBaseUrl()}/status`);
+  logApiFootballKeyDetectedOnce();
   const response = await fetch(url.toString(), {
-    headers: apiFootballHeaders(apiKey),
+    headers: apiFootballHeaders(normalizedApiKey),
     signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
   });
   const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -481,8 +499,8 @@ export const checkApiFootballStatus = async (
 };
 
 const apiFootballHeaders = (apiKey: string) => ({
-  "x-apisports-host": "v3.football.api-sports.io",
   "x-apisports-key": apiKey,
+  "x-apisports-host": "v3.football.api-sports.io",
 });
 
 const selectBestApiFootballTeam = (teams: ApiFootballTeam[], teamName: string, teamCode: string) => {
@@ -529,8 +547,6 @@ const resolveApiFootballTeamId = async (
   );
   if (mappedId && /^\d+$/.test(mappedId)) return { teamId: mappedId, teamName: null };
 
-  const leagueId = leagueIds[input.championship];
-  const season = seasonForChampionship(input.championship);
   const attempts: URL[] = [];
   const addAttempt = (params: Record<string, string | number | null | undefined>) => {
     const url = new URL(`${getApiFootballBaseUrl()}/teams`);
@@ -542,13 +558,8 @@ const resolveApiFootballTeamId = async (
     if (!attempts.some((attempt) => attempt.toString() === url.toString())) attempts.push(url);
   };
 
-  if (input.teamCode) addAttempt({ code: input.teamCode });
-  addAttempt({ country: input.teamName });
   addAttempt({ search: input.teamName });
-  addAttempt({ name: input.teamName });
-  addAttempt({ league: leagueId, search: input.teamName, season });
-  addAttempt({ league: leagueId, name: input.teamName, season });
-  addAttempt({ league: leagueId, season });
+  addAttempt({ country: input.teamName });
 
   for (const url of attempts) {
     try {
@@ -600,9 +611,13 @@ export const fetchApiFootballRoster = async (
   apiKey = process.env.API_FOOTBALL_KEY,
   warnings: string[] = [],
 ): Promise<ProviderRosterPlayer[]> => {
-  if (!apiKey) return [];
+  const normalizedApiKey = normalizeApiFootballKey(apiKey);
+  if (!normalizedApiKey) {
+    addUniqueWarning(warnings, API_FOOTBALL_MISSING_RUNTIME_KEY_WARNING);
+    return [];
+  }
 
-  const resolvedTeam = await resolveApiFootballTeamId(input, apiKey, warnings);
+  const resolvedTeam = await resolveApiFootballTeamId(input, normalizedApiKey, warnings);
   warnings.forEach((warning) => logRoster(warning, "warn"));
   if (!resolvedTeam?.teamId) return [];
 
@@ -612,7 +627,7 @@ export const fetchApiFootballRoster = async (
   logRoster(`API-Football roster start: ${input.teamName} (${input.teamCode}) team=${resolvedTeam.teamId}`);
   const { envelope, httpStatus } = await fetchApiFootballEnvelope<ApiFootballSquad[]>(
     url,
-    apiKey,
+    normalizedApiKey,
     "API-Football roster",
     warnings,
   );
@@ -901,10 +916,11 @@ export const fetchTeamRoster = async (
 ): Promise<ProviderRosterPlayer[]> => {
   const warnings: string[] = [];
   logRoster(`Roster sync team start: ${input.teamName} (${input.teamCode}) championship=${input.championship}`);
+  const apiFootballKey = normalizeApiFootballKey(process.env.API_FOOTBALL_KEY);
 
-  if (process.env.API_FOOTBALL_KEY) {
+  if (apiFootballKey) {
     try {
-      const roster = await fetchApiFootballRoster(input, process.env.API_FOOTBALL_KEY, warnings);
+      const roster = await fetchApiFootballRoster(input, apiFootballKey, warnings);
       if (roster.length > 0) {
         logRoster(`API-Football roster success: ${input.teamName} players=${roster.length}`);
         return roster.map((player) => ({
@@ -918,7 +934,7 @@ export const fetchTeamRoster = async (
       warnings.push(`API-Football falhou para ${input.teamName} (${input.teamCode}): ${error instanceof Error ? error.message : "erro desconhecido"}.`);
     }
   } else {
-    warnings.push("API_FOOTBALL_KEY nao configurada.");
+    addUniqueWarning(warnings, API_FOOTBALL_MISSING_RUNTIME_KEY_WARNING);
   }
 
   try {

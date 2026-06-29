@@ -425,7 +425,11 @@ export const syncAutomaticMatches = async (_tournaments: Tournament[]) => {
 
 export type SyncRostersResponse = {
   championship: string;
+  hasMore: boolean;
+  nextOffset: number;
   ok: boolean;
+  processedTeams: number;
+  remainingTeams: number;
   summary: {
     debug?: {
       apiFootballStatus?: {
@@ -442,8 +446,11 @@ export type SyncRostersResponse = {
       } | null;
     };
     globalWarnings?: string[];
+    hasMore: boolean;
     playersFetched: number;
     playersUpserted: number;
+    processedTeams: number;
+    remainingTeams: number;
     rostersUpserted: number;
     teamsChecked: number;
     teamsFailed: number;
@@ -463,6 +470,8 @@ export type SyncRostersResponse = {
 
 export const syncRosters = async (payload: {
   championship?: string;
+  limit?: number;
+  offset?: number;
   team_codes?: string[];
 } = {}): Promise<SyncRostersResponse> => {
   const { data, error } = await supabase.auth.getSession();
@@ -473,6 +482,8 @@ export const syncRosters = async (payload: {
   const response = await fetch("/api/admin/sync-rosters", {
     body: JSON.stringify({
       championship: payload.championship ?? "world_cup_2026",
+      ...(typeof payload.limit === "number" ? { limit: payload.limit } : {}),
+      ...(typeof payload.offset === "number" ? { offset: payload.offset } : {}),
       ...(payload.team_codes?.length ? { team_codes: payload.team_codes } : {}),
     }),
     headers: {
@@ -482,10 +493,31 @@ export const syncRosters = async (payload: {
     method: "POST",
   });
 
-  const responsePayload = (await response.json()) as SyncRostersResponse & { error?: string };
-  if (!response.ok) {
-    throw new Error(responsePayload.error ?? "Nao foi possivel sincronizar jogadores.");
+  const contentType = response.headers.get("content-type") || "";
+  const rawText = await response.text();
+  let responsePayload: (SyncRostersResponse & { details?: string; error?: string; message?: string }) | null = null;
+
+  if (contentType.includes("application/json") && rawText) {
+    try {
+      responsePayload = JSON.parse(rawText) as SyncRostersResponse & { details?: string; error?: string; message?: string };
+    } catch {
+      throw new Error(`Resposta inválida do servidor: ${rawText.slice(0, 300)}`);
+    }
   }
+
+  if (!response.ok) {
+    throw new Error(
+      responsePayload?.error
+      ?? responsePayload?.message
+      ?? responsePayload?.details
+      ?? `Falha HTTP ${response.status}: ${rawText.slice(0, 300)}`,
+    );
+  }
+
+  if (!responsePayload) {
+    throw new Error(`Resposta inválida do servidor: ${rawText.slice(0, 300)}`);
+  }
+
   return responsePayload;
 };
 

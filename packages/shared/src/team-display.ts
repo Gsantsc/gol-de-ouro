@@ -147,6 +147,48 @@ export const parseKnockoutPlaceholder = (value?: string | null): KnockoutPlaceho
 export const isKnockoutPlaceholder = (value?: string | null) =>
   parseKnockoutPlaceholder(value) !== null;
 
+export const normalizeBracketPhase = (round?: string | null, stage?: string | null, matchNumber?: number | null): string | null => {
+  if (!round && !stage && matchNumber === undefined) return null;
+
+  const normalizedRound = round?.toLowerCase().trim() ?? "";
+  const normalizedStage = stage?.toLowerCase().trim() ?? "";
+
+  // Try to parse from round/stage strings first
+  if (/round of 32|1\/16|segundas|round of 32/i.test(normalizedRound) || /round of 32|1\/16|segundas/i.test(normalizedStage)) {
+    return "round_of_32";
+  }
+  if (/round of 16|oitavas|1\/8/i.test(normalizedRound) || /round of 16|oitavas/i.test(normalizedStage)) {
+    return "round_of_16";
+  }
+  if (/quarterfinal|quartas|quarter/i.test(normalizedRound) || /quarterfinal|quartas/i.test(normalizedStage)) {
+    return "quarter_final";
+  }
+  if (/semifinal|semi/i.test(normalizedRound) || /semifinal|semi/i.test(normalizedStage)) {
+    return "semi_final";
+  }
+  if (/third.?place|disputa.*3|3.*lugar/i.test(normalizedRound) || /third.?place/i.test(normalizedStage)) {
+    return "third_place";
+  }
+  if (/final/i.test(normalizedRound) || /final/i.test(normalizedStage)) {
+    return "final";
+  }
+  if (/group stage|group/i.test(normalizedRound) || /group stage/i.test(normalizedStage)) {
+    return "group_stage";
+  }
+
+  // Fallback to match number ranges
+  if (matchNumber !== undefined && matchNumber !== null) {
+    if (matchNumber >= 73 && matchNumber <= 88) return "round_of_32";
+    if (matchNumber >= 89 && matchNumber <= 96) return "round_of_16";
+    if (matchNumber >= 97 && matchNumber <= 100) return "quarter_final";
+    if (matchNumber === 101 || matchNumber === 102) return "semi_final";
+    if (matchNumber === 103) return "third_place";
+    if (matchNumber === 104) return "final";
+  }
+
+  return null;
+};
+
 export const formatTeamDisplayName = (teamName?: string | null, locale = "pt-BR") => {
   if (!teamName?.trim()) return "A definir";
   if (isKnockoutPlaceholder(teamName)) return "A definir";

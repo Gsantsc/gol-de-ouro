@@ -1,3 +1,7 @@
+// EMERGENCY BRACKET IMPORT
+// This endpoint is for emergency manual bracket import only.
+// The primary flow should be: ESPN Sync → Supabase matches → App Mobile
+// Use sync-matches API to automatically populate knockout matches from ESPN.
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createServiceSupabaseClient } from "@/server/sync-results";

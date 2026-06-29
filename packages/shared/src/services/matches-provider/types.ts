@@ -42,6 +42,9 @@ export type ProviderMatch = {
   hasFinalScore?: boolean;
   stats: ProviderMatchStats;
   events: ProviderMatchEvent[];
+  matchNumber?: number | null;
+  bracketPhase?: string | null;
+  bracketOrder?: number | null;
 };
 
 export type MatchesProvider = {

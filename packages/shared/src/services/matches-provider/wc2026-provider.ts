@@ -3,6 +3,7 @@
 // TEMP API MIGRATION
 import type { MatchStatus } from "../../types";
 import type { MatchesProvider, ProviderMatch, ProviderMatchEvent, ProviderMatchStats } from "./types";
+import { isKnockoutPlaceholder, normalizeBracketPhase, parseKnockoutPlaceholder } from "../../team-display";
 
 const debugLog = (...args: unknown[]) => {
   if (process.env.NODE_ENV !== "production") console.log(...args);
@@ -111,12 +112,21 @@ const matchFromApi = (apiMatch: WC2026Match): ProviderMatch => {
   const homeScore = apiMatch.home_score ?? 0;
   const awayScore = apiMatch.away_score ?? 0;
   const status = statusFromApi(apiMatch.status);
+  const homeTeam = apiMatch.home_team || "TBD";
+  const awayTeam = apiMatch.away_team || "TBD";
+  const matchNumber = apiMatch.match_number ?? null;
+  
+  // Detect bracket phase from round string or match number
+  const bracketPhase = normalizeBracketPhase(apiMatch.round, null, matchNumber);
+  
+  // Use match number as bracket order if available
+  const bracketOrder = matchNumber ?? null;
   
   return {
     externalId: String(apiMatch.id),
     championship: "world_cup_2026",
-    homeTeam: apiMatch.home_team || "TBD",
-    awayTeam: apiMatch.away_team || "TBD",
+    homeTeam,
+    awayTeam,
     homeLogoUrl: null,
     awayLogoUrl: null,
     kickoff: apiMatch.kickoff_utc,
@@ -128,6 +138,9 @@ const matchFromApi = (apiMatch: WC2026Match): ProviderMatch => {
     awayScore,
     stats: defaultStats(),
     events: [],
+    matchNumber,
+    bracketPhase,
+    bracketOrder,
   };
 };
 

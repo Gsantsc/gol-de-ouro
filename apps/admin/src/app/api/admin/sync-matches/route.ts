@@ -8,7 +8,10 @@ import {
   CHAMPIONSHIP_LABELS,
   calculateMatchStatus,
   createMatchesProvider,
+  getPlaceholderSeedLabel,
   isKnockoutPlaceholder,
+  normalizeBracketPhase,
+  parseKnockoutPlaceholder,
   predictionWindowPayload,
   type ChampionshipKey,
   type ProviderMatch,
@@ -33,6 +36,14 @@ type SyncSummary = {
   cacheHits: number;
   cacheMisses: number;
   knockoutResolution: KnockoutResolutionSummary;
+  knockoutSync: {
+    matchesChecked: number;
+    realTeamsFromEspn: number;
+    placeholdersDetected: number;
+    placeholdersResolved: number;
+    unresolved: number;
+    warnings: string[];
+  };
 };
 
 type ExistingMatchRow = {
@@ -55,6 +66,8 @@ type ExistingMatchRow = {
   red_cards_home?: number | null;
   stats?: ProviderMatchStats | null;
   status?: string | null;
+  home_original_placeholder?: string | null;
+  away_original_placeholder?: string | null;
 };
 
 type UpsertProviderMatchResult = {
@@ -438,8 +451,23 @@ const upsertProviderMatch = async (
     ? existingAwayLogoUrl ?? providerMatch.awayLogoUrl
     : providerMatch.awayLogoUrl;
 
+  // Extract bracket information from provider match
+  const bracketPhase = providerMatch.bracketPhase || normalizeBracketPhase(providerMatch.round, null, providerMatch.matchNumber);
+  const bracketOrder = providerMatch.bracketOrder ?? providerMatch.matchNumber ?? null;
+  const matchNumber = providerMatch.matchNumber ?? null;
+  
+  // Parse placeholders for seed information
+  const homeParsed = parseKnockoutPlaceholder(providerMatch.homeTeam);
+  const awayParsed = parseKnockoutPlaceholder(providerMatch.awayTeam);
+  const homeSeed = homeParsed ? (getPlaceholderSeedLabel(providerMatch.homeTeam) ?? providerMatch.homeTeam) : null;
+  const awaySeed = awayParsed ? (getPlaceholderSeedLabel(providerMatch.awayTeam) ?? providerMatch.awayTeam) : null;
+  
+  // Preserve original placeholder if we're replacing it with a real team
+  const homeOriginalPlaceholder = (existingHomeIsReal && providerHomeIsPlaceholder) ? existing?.home_original_placeholder : (providerHomeIsPlaceholder ? providerMatch.homeTeam : existing?.home_original_placeholder);
+  const awayOriginalPlaceholder = (existingAwayIsReal && providerAwayIsPlaceholder) ? existing?.away_original_placeholder : (providerAwayIsPlaceholder ? providerMatch.awayTeam : existing?.away_original_placeholder);
+
   // FIX MATCH UPSERT - Payload includes all required fields: provider_name, provider_external_id, championship, last_synced_at, home_team, away_team, logos, start_time, status
-  const payload = {
+  const payload: Record<string, unknown> = {
     away_score: providerMatch.awayScore,
     away_team: awayTeam,
     away_team_logo_url: awayLogoUrl,
@@ -466,6 +494,24 @@ const upsertProviderMatch = async (
     status,
     tournament_id: tournamentId,
   };
+  
+  // Add bracket fields if this is a knockout match
+  if (bracketPhase && bracketPhase !== "group_stage") {
+    payload.bracket_phase = bracketPhase;
+    payload.bracket_order = bracketOrder;
+    payload.match_number = matchNumber;
+    
+    if (homeSeed) payload.home_seed = homeSeed;
+    if (awaySeed) payload.away_seed = awaySeed;
+    if (homeOriginalPlaceholder) payload.home_original_placeholder = homeOriginalPlaceholder;
+    if (awayOriginalPlaceholder) payload.away_original_placeholder = awayOriginalPlaceholder;
+    
+    // Mark bracket as validated if we have real teams
+    if (!providerHomeIsPlaceholder && !providerAwayIsPlaceholder) {
+      payload.is_bracket_validated = true;
+      payload.bracket_validation_error = null;
+    }
+  }
 
   const matchResult = existing
     ? await supabase.from("matches").update(payload).eq("id", existing.id).select("id").single()
@@ -649,12 +695,27 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary & { starte
   }
 
   logSync(`SYNC FIXTURES COMPLETE: ${insertedCount} inserted, ${updatedCount} updated`);
+  
+  // Calculate knockout sync metrics from provider matches
+  const knockoutMatches = providerMatches.filter(m => m.bracketPhase && m.bracketPhase !== "group_stage");
+  const realTeamsFromEspn = knockoutMatches.filter(m => !isKnockoutPlaceholder(m.homeTeam) && !isKnockoutPlaceholder(m.awayTeam)).length;
+  const placeholdersDetected = knockoutMatches.filter(m => isKnockoutPlaceholder(m.homeTeam) || isKnockoutPlaceholder(m.awayTeam)).length;
+  
   let knockoutResolution = emptyKnockoutResolutionSummary();
   try {
     knockoutResolution = await resolveKnockoutParticipants(supabase, "world_cup_2026");
   } catch (error) {
     knockoutResolution.warnings.push(error instanceof Error ? error.message : "Falha ao resolver mata-mata.");
   }
+  
+  const knockoutSync = {
+    matchesChecked: knockoutMatches.length,
+    realTeamsFromEspn,
+    placeholdersDetected,
+    placeholdersResolved: knockoutResolution.resolved,
+    unresolved: knockoutResolution.pending,
+    warnings: knockoutResolution.warnings
+  };
 
   const runMessage =
     provider.name === "local-fixtures"
@@ -696,6 +757,7 @@ const runSync = async (supabase: SupabaseClient): Promise<SyncSummary & { starte
     preservedFinishedMatches: 0,
     skippedScorePreservation: 0,
     cacheMisses,
+    knockoutSync,
     startedAt,
     finishedAt,
     durationMs,

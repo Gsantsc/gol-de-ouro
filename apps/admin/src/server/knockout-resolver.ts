@@ -557,6 +557,12 @@ export const resolveKnockoutBracket = async (
       const resolvedAtField = side === "home" ? "home_resolved_at" : "away_resolved_at";
       const seedLabelField = side === "home" ? "home_seed_label" : "away_seed_label";
 
+      // If current team is already real (not placeholder), trust ESPN over resolver
+      if (isRealTeam(current)) {
+        summary.participantsSkipped += 1;
+        continue;
+      }
+
       if (current === resolved.team && sideCode(match, side) === resolved.code) {
         summary.participantsSkipped += 1;
         continue;

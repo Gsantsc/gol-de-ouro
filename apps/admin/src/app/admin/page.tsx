@@ -55,11 +55,9 @@ import {
   finishMatchAndScore,
   forceRefreshRanking,
   getCurrentProfile,
-  importKnockoutBracket,
   loadAdminData,
   reactivateUser,
   recalculatePredictionsNow,
-  type BracketImportSummary,
   type KnockoutResolutionSummary,
   type RecalculatePredictionsSummary,
   rejectUser,
@@ -1064,8 +1062,6 @@ const MatchesPanel = ({
   const [lastResultsSyncSummary, setLastResultsSyncSummary] = useState<SyncResultsSummary | null>(null);
   const [lastRecalculateSummary, setLastRecalculateSummary] = useState<RecalculatePredictionsSummary | null>(null);
   const [lastStatusUpdateSummary, setLastStatusUpdateSummary] = useState<{ checkedCount?: number; updatedCount?: number; byStatus?: Record<string, number>; knockoutResolution?: KnockoutResolutionSummary } | null>(null);
-  const [bracketJson, setBracketJson] = useState("");
-  const [lastBracketImportSummary, setLastBracketImportSummary] = useState<BracketImportSummary | null>(null);
   const [lastKnockoutResolution, setLastKnockoutResolution] = useState<KnockoutResolutionSummary | null>(null);
   const [matchQuery, setMatchQuery] = useState("");
   const [officialExtrasMatch, setOfficialExtrasMatch] = useState<Match | null>(null);
@@ -1322,8 +1318,6 @@ const MatchesPanel = ({
                     {actionKey === "sync-results" && "Atualizando resultados ESPN..."}
                     {actionKey === "recalculate-predictions" && "Recalculando pontuação..."}
                     {actionKey === "update-status" && "Atualizando status das partidas..."}
-                    {actionKey === "bracket-import-dry" && "Validando chave de mata-mata..."}
-                    {actionKey === "bracket-import" && "Importando chave de mata-mata..."}
                     {actionKey === "resolve-knockout" && "Resolvendo mata-mata..."}
                   </p>
                 </div>
@@ -1341,7 +1335,7 @@ const MatchesPanel = ({
             <div>
               <p className="text-sm font-black uppercase tracking-normal text-gold">Chave de mata-mata</p>
               <p className="mt-1 text-xs text-white/55">
-                Importe um JSON validado ou resolva participantes pendentes conforme os jogos terminarem.
+                A chave de mata-mata é populada automaticamente pela ESPN. Use Resolver mata-mata apenas para recalcular participantes pendentes após sincronizar jogos/resultados.
               </p>
             </div>
             <button
@@ -1372,84 +1366,18 @@ const MatchesPanel = ({
             </button>
           </div>
 
-          <textarea
-            className="input mt-4 min-h-[132px] w-full resize-y font-mono text-xs"
-            disabled={busy || Boolean(actionKey)}
-            onChange={(event) => setBracketJson(event.target.value)}
-            placeholder='{"championship":"world_cup_2026","source":"manual-official-bracket","matches":[]}'
-            value={bracketJson}
-          />
-
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <button
-              className="btn-secondary"
-              disabled={busy || Boolean(actionKey) || !bracketJson.trim()}
-              onClick={() =>
-                onAction(async () => {
-                  const result = await importKnockoutBracket(bracketJson, true);
-                  setLastBracketImportSummary(result);
-                  return result;
-                }, {
-                  loadingKey: "bracket-import-dry",
-                  successMessage: "Chave validada."
-                })
-              }
-            >
-              Validar JSON
-            </button>
-            <button
-              className="btn-primary"
-              disabled={busy || Boolean(actionKey) || !bracketJson.trim()}
-              onClick={() =>
-                onAction(async () => {
-                  const result = await importKnockoutBracket(bracketJson, false);
-                  setLastBracketImportSummary(result);
-                  await onRefresh();
-                  return result;
-                }, {
-                  loadingKey: "bracket-import",
-                  successMessage: "Chave importada."
-                })
-              }
-            >
-              Importar chave
-            </button>
-          </div>
-
-          {(lastBracketImportSummary || lastKnockoutResolution) && (
+          {lastKnockoutResolution && (
             <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {lastBracketImportSummary && (
-                <>
-                  <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
-                    <p className="text-lg font-black text-white">{lastBracketImportSummary.summary.received}</p>
-                    <p className="mt-1 text-xs font-bold text-white/50">Jogos recebidos</p>
-                  </div>
-                  <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
-                    <p className="text-lg font-black text-white">{lastBracketImportSummary.summary.matchesToUpdate}</p>
-                    <p className="mt-1 text-xs font-bold text-white/50">Jogos atualizados</p>
-                  </div>
-                </>
-              )}
-              {lastKnockoutResolution && (
-                <>
-                  <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
-                    <p className="text-lg font-black text-white">{lastKnockoutResolution.participantsResolved}</p>
-                    <p className="mt-1 text-xs font-bold text-white/50">Participantes resolvidos</p>
-                  </div>
-                  <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
-                    <p className="text-lg font-black text-white">{lastKnockoutResolution.participantsPending}</p>
-                    <p className="mt-1 text-xs font-bold text-white/50">Participantes pendentes</p>
-                  </div>
-                </>
-              )}
+              <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                <p className="text-lg font-black text-white">{lastKnockoutResolution.participantsResolved}</p>
+                <p className="mt-1 text-xs font-bold text-white/50">Participantes resolvidos</p>
+              </div>
+              <div className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+                <p className="text-lg font-black text-white">{lastKnockoutResolution.participantsPending}</p>
+                <p className="mt-1 text-xs font-bold text-white/50">Participantes pendentes</p>
+              </div>
             </div>
           )}
-
-          {lastBracketImportSummary?.errors.length ? (
-            <pre className="mt-3 max-h-40 overflow-auto rounded-md border border-red-400/30 bg-red-500/10 p-3 text-xs text-red-100">
-              {lastBracketImportSummary.errors.map((error) => error.message).join("\n")}
-            </pre>
-          ) : null}
           {lastKnockoutResolution?.warnings.length ? (
             <pre className="mt-3 max-h-40 overflow-auto rounded-md border border-gold/30 bg-gold/10 p-3 text-xs text-gold">
               {lastKnockoutResolution.warnings.join("\n")}

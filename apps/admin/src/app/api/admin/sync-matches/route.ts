@@ -405,6 +405,152 @@ const linkTeamsToMatches = async (
 };
 
 // FIX MATCH UPSERT - Ensuring all required fields are saved from API-Football
+const buildInsertMatchPayload = (
+  providerMatch: ProviderMatch,
+  providerName: string,
+  tournamentId: string,
+  status: string,
+  windowPayload: ReturnType<typeof predictionWindowPayload>,
+  richStats: ProviderMatchStats,
+  kickoffUtc: string,
+  venueTimezone: string | null,
+  homeTeam: string | null | undefined,
+  awayTeam: string | null | undefined,
+  homeLogoUrl: string | null,
+  awayLogoUrl: string | null,
+  bracketPhase: string | null,
+  bracketOrder: number | null,
+  matchNumber: number | null,
+  homeSeed: string | null,
+  awaySeed: string | null,
+  homeOriginalPlaceholder: string | null | undefined,
+  awayOriginalPlaceholder: string | null | undefined,
+  providerHomeIsPlaceholder: boolean,
+  providerAwayIsPlaceholder: boolean,
+): Record<string, unknown> => {
+  const payload: Record<string, unknown> = {
+    away_score: providerMatch.awayScore ?? 0,
+    away_team: awayTeam,
+    away_team_logo_url: awayLogoUrl,
+    championship: providerMatch.championship,
+    home_score: providerMatch.homeScore ?? 0,
+    home_team: homeTeam,
+    home_team_logo_url: homeLogoUrl,
+    last_synced_at: new Date().toISOString(),
+    live_score: { away: providerMatch.awayScore ?? 0, home: providerMatch.homeScore ?? 0 },
+    prediction_close_at: windowPayload.prediction_close_at,
+    prediction_open_at: windowPayload.prediction_open_at,
+    provider_external_id: providerMatch.externalId,
+    provider_name: providerName,
+    round: providerMatch.round,
+    stadium: providerMatch.stadium,
+    start_time: providerMatch.kickoff,
+    start_time_utc: kickoffUtc,
+    venue_timezone: venueTimezone,
+    source_timezone: venueTimezone,
+    kickoff_source: readProviderStatString(richStats, "source"),
+    kickoff_verified_at: new Date().toISOString(),
+    display_time_br: readProviderStatString(richStats, "kickoff_brt"),
+    stats: providerMatch.stats,
+    status,
+    tournament_id: tournamentId,
+  };
+
+  // Add bracket fields if this is a knockout match
+  if (bracketPhase && bracketPhase !== "group_stage") {
+    payload.bracket_phase = bracketPhase;
+    payload.bracket_order = bracketOrder;
+    payload.match_number = matchNumber;
+
+    if (homeSeed) payload.home_seed = homeSeed;
+    if (awaySeed) payload.away_seed = awaySeed;
+    if (homeOriginalPlaceholder) payload.home_original_placeholder = homeOriginalPlaceholder;
+    if (awayOriginalPlaceholder) payload.away_original_placeholder = awayOriginalPlaceholder;
+
+    // Mark bracket as validated if we have real teams
+    if (!providerHomeIsPlaceholder && !providerAwayIsPlaceholder) {
+      payload.is_bracket_validated = true;
+      payload.bracket_validation_error = null;
+    }
+  }
+
+  return payload;
+};
+
+const buildUpdateMatchPayload = (
+  providerMatch: ProviderMatch,
+  existing: ExistingMatchRow,
+  providerName: string,
+  tournamentId: string,
+  status: string,
+  windowPayload: ReturnType<typeof predictionWindowPayload>,
+  richStats: ProviderMatchStats,
+  kickoffUtc: string,
+  venueTimezone: string | null,
+  homeTeam: string | null | undefined,
+  awayTeam: string | null | undefined,
+  homeLogoUrl: string | null,
+  awayLogoUrl: string | null,
+  bracketPhase: string | null,
+  bracketOrder: number | null,
+  matchNumber: number | null,
+  homeSeed: string | null,
+  awaySeed: string | null,
+  homeOriginalPlaceholder: string | null | undefined,
+  awayOriginalPlaceholder: string | null | undefined,
+  providerHomeIsPlaceholder: boolean,
+  providerAwayIsPlaceholder: boolean,
+): Record<string, unknown> => {
+  const payload: Record<string, unknown> = {
+    away_team: awayTeam,
+    away_team_logo_url: awayLogoUrl,
+    championship: providerMatch.championship,
+    home_team: homeTeam,
+    home_team_logo_url: homeLogoUrl,
+    last_synced_at: new Date().toISOString(),
+    prediction_close_at: windowPayload.prediction_close_at,
+    prediction_open_at: windowPayload.prediction_open_at,
+    provider_external_id: providerMatch.externalId,
+    provider_name: providerName,
+    round: providerMatch.round,
+    stadium: providerMatch.stadium,
+    start_time: providerMatch.kickoff,
+    start_time_utc: kickoffUtc,
+    venue_timezone: venueTimezone,
+    source_timezone: venueTimezone,
+    kickoff_source: readProviderStatString(richStats, "source"),
+    kickoff_verified_at: new Date().toISOString(),
+    display_time_br: readProviderStatString(richStats, "kickoff_brt"),
+    stats: providerMatch.stats,
+    tournament_id: tournamentId,
+  };
+
+  // Only update status if match is not already finished
+  if (existing.status !== "encerrado") {
+    payload.status = status;
+  }
+
+  // Add bracket fields if this is a knockout match
+  if (bracketPhase && bracketPhase !== "group_stage") {
+    payload.bracket_phase = bracketPhase;
+    payload.bracket_order = bracketOrder;
+    payload.match_number = matchNumber;
+
+    if (homeSeed) payload.home_seed = homeSeed;
+    if (awaySeed) payload.away_seed = awaySeed;
+    if (homeOriginalPlaceholder) payload.home_original_placeholder = homeOriginalPlaceholder;
+    if (awayOriginalPlaceholder) payload.away_original_placeholder = awayOriginalPlaceholder;
+
+    // Mark bracket as validated if we have real teams
+    if (!providerHomeIsPlaceholder && !providerAwayIsPlaceholder) {
+      payload.is_bracket_validated = true;
+      payload.bracket_validation_error = null;
+    }
+  }
+
+  return payload;
+};
+
 const upsertProviderMatch = async (
   supabase: SupabaseClient,
   providerName: string,
@@ -455,63 +601,66 @@ const upsertProviderMatch = async (
   const bracketPhase = providerMatch.bracketPhase || normalizeBracketPhase(providerMatch.round, null, providerMatch.matchNumber);
   const bracketOrder = providerMatch.bracketOrder ?? providerMatch.matchNumber ?? null;
   const matchNumber = providerMatch.matchNumber ?? null;
-  
+
   // Parse placeholders for seed information
   const homeParsed = parseKnockoutPlaceholder(providerMatch.homeTeam);
   const awayParsed = parseKnockoutPlaceholder(providerMatch.awayTeam);
   const homeSeed = homeParsed ? (getPlaceholderSeedLabel(providerMatch.homeTeam) ?? providerMatch.homeTeam) : null;
   const awaySeed = awayParsed ? (getPlaceholderSeedLabel(providerMatch.awayTeam) ?? providerMatch.awayTeam) : null;
-  
-  // Preserve original placeholder if we're replacing it with a real team
-  const homeOriginalPlaceholder = (existingHomeIsReal && providerHomeIsPlaceholder) ? existing?.home_original_placeholder : (providerHomeIsPlaceholder ? providerMatch.homeTeam : existing?.home_original_placeholder);
-  const awayOriginalPlaceholder = (existingAwayIsReal && providerAwayIsPlaceholder) ? existing?.away_original_placeholder : (providerAwayIsPlaceholder ? providerMatch.awayTeam : existing?.away_original_placeholder);
 
-  // FIX MATCH UPSERT - Payload includes all required fields: provider_name, provider_external_id, championship, last_synced_at, home_team, away_team, logos, start_time, status
-  const payload: Record<string, unknown> = {
-    away_score: providerMatch.awayScore,
-    away_team: awayTeam,
-    away_team_logo_url: awayLogoUrl,
-    championship: providerMatch.championship,
-    home_score: providerMatch.homeScore,
-    home_team: homeTeam,
-    home_team_logo_url: homeLogoUrl,
-    last_synced_at: new Date().toISOString(),
-    live_score: { away: providerMatch.awayScore, home: providerMatch.homeScore },
-    prediction_close_at: windowPayload.prediction_close_at,
-    prediction_open_at: windowPayload.prediction_open_at,
-    provider_external_id: providerMatch.externalId,
-    provider_name: providerName,
-    round: providerMatch.round,
-    stadium: providerMatch.stadium,
-    start_time: providerMatch.kickoff,
-    start_time_utc: kickoffUtc,
-    venue_timezone: venueTimezone,
-    source_timezone: venueTimezone,
-    kickoff_source: readProviderStatString(richStats, "source"),
-    kickoff_verified_at: new Date().toISOString(),
-    display_time_br: readProviderStatString(richStats, "kickoff_brt"),
-    stats: providerMatch.stats,
-    status,
-    tournament_id: tournamentId,
-  };
-  
-  // Add bracket fields if this is a knockout match
-  if (bracketPhase && bracketPhase !== "group_stage") {
-    payload.bracket_phase = bracketPhase;
-    payload.bracket_order = bracketOrder;
-    payload.match_number = matchNumber;
-    
-    if (homeSeed) payload.home_seed = homeSeed;
-    if (awaySeed) payload.away_seed = awaySeed;
-    if (homeOriginalPlaceholder) payload.home_original_placeholder = homeOriginalPlaceholder;
-    if (awayOriginalPlaceholder) payload.away_original_placeholder = awayOriginalPlaceholder;
-    
-    // Mark bracket as validated if we have real teams
-    if (!providerHomeIsPlaceholder && !providerAwayIsPlaceholder) {
-      payload.is_bracket_validated = true;
-      payload.bracket_validation_error = null;
-    }
-  }
+  // Preserve original placeholder if we're replacing it with a real team
+  const homeOriginalPlaceholder = (existingHomeIsReal && providerHomeIsPlaceholder) ? (existing?.home_original_placeholder ?? null) : (providerHomeIsPlaceholder ? providerMatch.homeTeam : (existing?.home_original_placeholder ?? null));
+  const awayOriginalPlaceholder = (existingAwayIsReal && providerAwayIsPlaceholder) ? (existing?.away_original_placeholder ?? null) : (providerAwayIsPlaceholder ? providerMatch.awayTeam : (existing?.away_original_placeholder ?? null));
+
+  // Build appropriate payload based on whether match exists
+  const payload = existing
+    ? buildUpdateMatchPayload(
+        providerMatch,
+        existing,
+        providerName,
+        tournamentId,
+        status,
+        windowPayload,
+        richStats,
+        kickoffUtc,
+        venueTimezone,
+        homeTeam,
+        awayTeam,
+        homeLogoUrl,
+        awayLogoUrl,
+        bracketPhase,
+        bracketOrder,
+        matchNumber,
+        homeSeed,
+        awaySeed,
+        homeOriginalPlaceholder,
+        awayOriginalPlaceholder,
+        providerHomeIsPlaceholder,
+        providerAwayIsPlaceholder,
+      )
+    : buildInsertMatchPayload(
+        providerMatch,
+        providerName,
+        tournamentId,
+        status,
+        windowPayload,
+        richStats,
+        kickoffUtc,
+        venueTimezone,
+        homeTeam,
+        awayTeam,
+        homeLogoUrl,
+        awayLogoUrl,
+        bracketPhase,
+        bracketOrder,
+        matchNumber,
+        homeSeed,
+        awaySeed,
+        homeOriginalPlaceholder,
+        awayOriginalPlaceholder,
+        providerHomeIsPlaceholder,
+        providerAwayIsPlaceholder,
+      );
 
   const matchResult = existing
     ? await supabase.from("matches").update(payload).eq("id", existing.id).select("id").single()
@@ -544,10 +693,6 @@ const upsertProviderMatch = async (
     throw statsResult.error;
   }
 
-  // FINAL SCORE SYNC
-  if (status === "encerrado" && providerMatch.hasFinalScore !== false && existing?.status !== "encerrado") {
-
-  }
 
   if (providerMatch.events.length) {
     const eventsResult = await supabase.from("match_events").upsert(

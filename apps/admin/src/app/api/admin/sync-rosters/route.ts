@@ -331,12 +331,13 @@ const upsertCompetitionRosters = async (
     };
   });
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("competition_rosters")
-    .upsert(rows, { onConflict: "championship,player_id" });
+    .upsert(rows, { onConflict: "championship,player_id" })
+    .select("player_id");
   if (error) throw error;
 
-  return rows.length;
+  return data?.length ?? 0;
 };
 
 const emptyTeamResult = (team: TeamNeedingRoster): TeamSyncResult => ({
@@ -401,12 +402,14 @@ const syncTeamRoster = async (
     }
   }
 
-  try {
-    result.rostersUpserted = await upsertCompetitionRosters(supabase, championship, syncedPlayers);
-  } catch (error) {
-    result.warnings.push(
-      `Falha ao vincular roster de ${team.team_name}: ${error instanceof Error ? error.message : "erro desconhecido"}.`,
-    );
+  if (syncedPlayers.length > 0) {
+    try {
+      result.rostersUpserted = await upsertCompetitionRosters(supabase, championship, syncedPlayers);
+    } catch (error) {
+      result.warnings.push(
+        `Falha ao vincular roster de ${team.team_name}: ${error instanceof Error ? error.message : "erro desconhecido"}.`,
+      );
+    }
   }
 
   return {
@@ -430,12 +433,12 @@ export async function POST(request: NextRequest) {
     const championship = readOptionalString(body.championship) ?? DEFAULT_CHAMPIONSHIP;
     const teamCodes = readTeamCodes(body.team_codes);
     const supabase = createServiceSupabaseClient();
-    const teamsFromMatches = await getTeamsNeedingRoster(supabase, championship);
+    const warnings: string[] = [];
+    const teamsFromMatches = await getTeamsNeedingRoster(supabase, championship, warnings);
     const teams = teamCodes
       ? teamsFromMatches.filter((team) => teamCodes.includes(normalizeCode(team.team_code)))
       : teamsFromMatches;
 
-    const warnings: string[] = [];
     if (teamsFromMatches.length === 0) {
       warnings.push(`Nenhum time real encontrado em partidas de ${championship}.`);
     } else if (teamCodes && teams.length === 0) {

@@ -100,6 +100,18 @@ const run = () => {
     ...prediction,
     ...scorePrediction(finishedMatch, prediction),
   }));
+  const scoreUpdatePayload = scorePrediction(finishedMatch, {
+    id: "p-player-fields",
+    match_id: "m1",
+    predicted_away_score: 1,
+    predicted_first_goal_no_goals: false,
+    predicted_first_scorer: "Eder Militao",
+    predicted_first_scorer_id: "player-eder",
+    predicted_home_score: 2,
+    predicted_man_of_match: "Vini Jr",
+    predicted_man_of_match_id: "player-vini",
+    predicted_winner: "home",
+  });
 
   const winner = scored.find((prediction) => prediction.id === "p1");
   const loser = scored.find((prediction) => prediction.id === "p2");
@@ -110,7 +122,56 @@ const run = () => {
   assert(zero?.points === 0, "draw miss should stay at 0 points");
   assert(winner?.locked === true, "scored prediction should be locked");
   assert(zero?.locked === true, "0-point prediction should still be locked/processed");
+  assert(!("predicted_first_scorer_id" in scoreUpdatePayload), "score update must not write first scorer id");
+  assert(!("predicted_first_scorer" in scoreUpdatePayload), "score update must not write first scorer text");
+  assert(!("predicted_man_of_match_id" in scoreUpdatePayload), "score update must not write man of match id");
+  assert(!("predicted_man_of_match" in scoreUpdatePayload), "score update must not write man of match text");
+  assert(!("predicted_first_goal_no_goals" in scoreUpdatePayload), "score update must not write no-goals flag");
   console.log("PASS - 3 predictions in finished matches");
+
+  const playerMarketMatch = {
+    ...finishedMatch,
+    first_goal_scorer: "Eder Militao",
+    first_goal_scorer_id: "player-eder",
+    man_of_match: "Vini Jr",
+    man_of_match_id: "player-vini",
+  };
+  const fullPlayerHit = calculatePredictionPoints(buildOfficial(playerMarketMatch), buildPrediction({
+    predicted_away_score: 1,
+    predicted_both_teams_score: true,
+    predicted_first_scorer_id: "player-eder",
+    predicted_home_score: 2,
+    predicted_man_of_match_id: "player-vini",
+    predicted_winner: "home",
+  }));
+  assert(fullPlayerHit === 25, "exact + outcome + first scorer id + both teams + man id should total 25");
+
+  const fallbackPlayerHit = calculatePredictionPoints(buildOfficial({
+    ...playerMarketMatch,
+    first_goal_scorer_id: null,
+    man_of_match_id: null,
+  }), buildPrediction({
+    predicted_away_score: 0,
+    predicted_first_scorer: "éder militão",
+    predicted_first_scorer_id: "missing-local-id",
+    predicted_home_score: 1,
+    predicted_man_of_match: "vini jr",
+    predicted_man_of_match_id: "missing-local-id-2",
+    predicted_winner: "home",
+  }));
+  assert(fallbackPlayerHit === 13, "fallback text with accents should award first scorer + man of match");
+
+  const mismatchedIds = calculatePredictionPoints(buildOfficial(playerMarketMatch), buildPrediction({
+    predicted_away_score: 0,
+    predicted_first_scorer: "Eder Militao",
+    predicted_first_scorer_id: "other-player",
+    predicted_home_score: 1,
+    predicted_man_of_match: "Vini Jr",
+    predicted_man_of_match_id: "other-mom",
+    predicted_winner: "home",
+  }));
+  assert(mismatchedIds === 5, "different ids must not fallback to equal text when both ids exist");
+  console.log("PASS - player market scoring by id/fallback");
 
   const ranking = buildRanking(scored, [finishedMatch]);
   assert(ranking.total_points === scored.reduce((sum, prediction) => sum + prediction.points, 0), "ranking sums all points");

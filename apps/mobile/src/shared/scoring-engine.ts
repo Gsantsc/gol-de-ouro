@@ -65,8 +65,35 @@ export const predictionOutcome = ({ awayScore, homeScore }: ScoreInput): Predict
 };
 
 const normalizeMarketText = (value?: string | null) => {
-  const normalized = value?.trim().toLowerCase();
+  const normalized = value
+    ?.trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
   return normalized || null;
+};
+
+const normalizeMarketId = (value?: string | null) => value?.trim() || null;
+
+const marketHit = (
+  officialId: string | null | undefined,
+  predictionId: string | null | undefined,
+  officialText: string | null | undefined,
+  predictionText: string | null | undefined,
+) => {
+  const normalizedOfficialId = normalizeMarketId(officialId);
+  const normalizedPredictionId = normalizeMarketId(predictionId);
+
+  if (normalizedOfficialId && normalizedPredictionId) {
+    return normalizedOfficialId === normalizedPredictionId;
+  }
+
+  const normalizedOfficialText = normalizeMarketText(officialText);
+  const normalizedPredictionText = normalizeMarketText(predictionText);
+
+  return normalizedOfficialText !== null
+    && normalizedPredictionText !== null
+    && normalizedOfficialText === normalizedPredictionText;
 };
 
 export const calculatePredictionBreakdown = (
@@ -88,21 +115,7 @@ export const calculatePredictionBreakdown = (
   const hasOfficialFirstScorer = Boolean(official.firstScorerId || normalizeMarketText(official.firstScorer));
   const firstScorerHit = Boolean(
     !isNoGoalMatch
-    && (
-      (
-        official.firstScorerId !== null
-        && official.firstScorerId !== undefined
-        && prediction.firstScorerId !== null
-        && prediction.firstScorerId !== undefined
-        && official.firstScorerId === prediction.firstScorerId
-      )
-      || (
-        official.firstScorerId == null
-        && prediction.firstScorerId == null
-        && normalizeMarketText(official.firstScorer) !== null
-        && normalizeMarketText(official.firstScorer) === normalizeMarketText(prediction.firstScorer)
-      )
-    )
+    && marketHit(official.firstScorerId, prediction.firstScorerId, official.firstScorer, prediction.firstScorer)
   );
   const firstScorer = isNoGoalMatch
     ? { label: "Nao se aplica", maxPoints: 5 as const, points: 0, status: "not_applicable" as const }
@@ -126,20 +139,11 @@ export const calculatePredictionBreakdown = (
   };
 
   const hasOfficialManOfMatch = Boolean(official.manOfMatchId || normalizeMarketText(official.manOfMatch));
-  const manOfMatchHit = Boolean(
-    (
-      official.manOfMatchId !== null
-      && official.manOfMatchId !== undefined
-      && prediction.manOfMatchId !== null
-      && prediction.manOfMatchId !== undefined
-      && official.manOfMatchId === prediction.manOfMatchId
-    )
-    || (
-      official.manOfMatchId == null
-      && prediction.manOfMatchId == null
-      && normalizeMarketText(official.manOfMatch) !== null
-      && normalizeMarketText(official.manOfMatch) === normalizeMarketText(prediction.manOfMatch)
-    )
+  const manOfMatchHit = marketHit(
+    official.manOfMatchId,
+    prediction.manOfMatchId,
+    official.manOfMatch,
+    prediction.manOfMatch,
   );
   const manOfMatch = !hasOfficialManOfMatch
     ? { label: "Sem dado oficial", maxPoints: 3 as const, points: 0, status: "no_official_data" as const }

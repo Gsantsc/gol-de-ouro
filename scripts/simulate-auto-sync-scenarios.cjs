@@ -28,12 +28,6 @@ const scorePrediction = (match, prediction) => {
     points += 10;
   }
   if (predictedOutcome === officialOutcome) points += 5;
-  if (
-    prediction.predicted_home_score - prediction.predicted_away_score
-    === match.home_score - match.away_score
-  ) {
-    points += 3;
-  }
 
   return points;
 };

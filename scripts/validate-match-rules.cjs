@@ -36,61 +36,53 @@ const outcome = ({ awayScore, homeScore }) => {
 };
 
 const normalize = (value) => {
-  const next = String(value ?? "").trim().toLowerCase();
+  const next = String(value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
   return next || null;
+};
+
+const normalizeId = (value) => String(value ?? "").trim() || null;
+
+const marketHit = (officialId, predictionId, officialText, predictionText) => {
+  const nextOfficialId = normalizeId(officialId);
+  const nextPredictionId = normalizeId(predictionId);
+  if (nextOfficialId && nextPredictionId) return nextOfficialId === nextPredictionId;
+
+  const nextOfficialText = normalize(officialText);
+  const nextPredictionText = normalize(predictionText);
+  return nextOfficialText !== null
+    && nextPredictionText !== null
+    && nextOfficialText === nextPredictionText;
 };
 
 const calculatePredictionPoints = (official, prediction) => {
   const exact = official.homeScore === prediction.homeScore && official.awayScore === prediction.awayScore;
   const winner = prediction.winner ?? outcome(prediction);
   const sameOutcome = outcome(official) === winner;
-  const sameGoalDifference = official.homeScore - official.awayScore === prediction.homeScore - prediction.awayScore;
+  const isNoGoalMatch = official.homeScore === 0 && official.awayScore === 0;
   const firstScorer =
-    (official.firstGoalNoGoals && prediction.firstGoalNoGoals)
-    || (
-      official.firstScorerId
-      && prediction.firstScorerId
-      && official.firstScorerId === prediction.firstScorerId
-    )
-    || (
-      !official.firstScorerId
-      && !prediction.firstScorerId
-      && normalize(official.firstScorer)
-      && normalize(official.firstScorer) === normalize(prediction.firstScorer)
-    );
+    !isNoGoalMatch
+    && marketHit(official.firstScorerId, prediction.firstScorerId, official.firstScorer, prediction.firstScorer);
   const bothTeamsScore =
     prediction.bothTeamsScore !== null
     && prediction.bothTeamsScore !== undefined
     && prediction.bothTeamsScore === (official.homeScore > 0 && official.awayScore > 0);
-  const manOfMatch =
-    (
-      official.manOfMatchId
-      && prediction.manOfMatchId
-      && official.manOfMatchId === prediction.manOfMatchId
-    )
-    || (
-      !official.manOfMatchId
-      && !prediction.manOfMatchId
-      && normalize(official.manOfMatch)
-      && normalize(official.manOfMatch) === normalize(prediction.manOfMatch)
-    );
-  const redCard =
-    prediction.redCard !== null
-    && prediction.redCard !== undefined
-    && official.redCard !== null
-    && official.redCard !== undefined
-    && prediction.redCard === official.redCard;
+  const manOfMatch = marketHit(
+    official.manOfMatchId,
+    prediction.manOfMatchId,
+    official.manOfMatch,
+    prediction.manOfMatch,
+  );
 
   let points = 0;
   if (exact) points += 10;
   if (sameOutcome) points += 5;
-  if (sameGoalDifference) points += 3;
-  if (firstScorer) points += 8;
+  if (firstScorer) points += 5;
   if (bothTeamsScore) points += 2;
-  if (manOfMatch) points += 6;
-  if (redCard) points += 2;
-  if (exact && firstScorer) points += 10;
-  if (exact && sameOutcome && sameGoalDifference && firstScorer && bothTeamsScore && manOfMatch && redCard) points += 20;
+  if (manOfMatch) points += 3;
 
   return points;
 };
@@ -162,22 +154,22 @@ const official = {
 };
 
 const scoringCases = [
-  ["placar exato", official, { homeScore: 2, awayScore: 1 }, 18],
-  ["vencedor correto", official, { homeScore: 1, awayScore: 0, winner: "home" }, 8],
-  ["empate correto", { homeScore: 1, awayScore: 1 }, { homeScore: 2, awayScore: 2, winner: "draw" }, 8],
-  ["diferenca de gols", official, { homeScore: 3, awayScore: 2, winner: "away" }, 3],
-  ["primeiro jogador por id", official, { homeScore: 0, awayScore: 0, firstScorerId: "player-santiago-gimenez" }, 8],
-  ["primeiro jogador legado", { ...official, firstScorerId: null }, { homeScore: 0, awayScore: 0, firstScorer: "hirving lozano" }, 8],
-  ["sem gols", { homeScore: 0, awayScore: 0, firstGoalNoGoals: true }, { homeScore: 0, awayScore: 0, firstGoalNoGoals: true }, 36],
+  ["placar exato", official, { homeScore: 2, awayScore: 1 }, 15],
+  ["vencedor correto", official, { homeScore: 1, awayScore: 0, winner: "home" }, 5],
+  ["empate correto", { homeScore: 1, awayScore: 1 }, { homeScore: 2, awayScore: 2, winner: "draw" }, 5],
+  ["diferenca de gols nao pontua isoladamente", official, { homeScore: 3, awayScore: 2, winner: "away" }, 0],
+  ["primeiro jogador por id", official, { homeScore: 0, awayScore: 0, firstScorerId: "player-santiago-gimenez" }, 5],
+  ["primeiro jogador legado", { ...official, firstScorerId: null }, { homeScore: 0, awayScore: 0, firstScorer: "hirving lozano" }, 5],
+  ["sem gols sem bonus de primeiro jogador", { homeScore: 0, awayScore: 0, firstGoalNoGoals: true }, { homeScore: 0, awayScore: 0, firstGoalNoGoals: true }, 15],
   ["ambos marcam", official, { homeScore: 0, awayScore: 0, bothTeamsScore: true }, 2],
-  ["homem do jogo por id", official, { homeScore: 0, awayScore: 0, manOfMatchId: "player-edson-alvarez" }, 6],
-  ["homem do jogo legado", { ...official, manOfMatchId: null }, { homeScore: 0, awayScore: 0, manOfMatch: "edson alvarez" }, 6],
-  ["cartao vermelho", official, { homeScore: 0, awayScore: 0, redCard: true }, 2],
+  ["homem do jogo por id", official, { homeScore: 0, awayScore: 0, manOfMatchId: "player-edson-alvarez" }, 3],
+  ["homem do jogo legado", { ...official, manOfMatchId: null }, { homeScore: 0, awayScore: 0, manOfMatch: "edson alvarez" }, 3],
+  ["cartao vermelho nao pontua", official, { homeScore: 0, awayScore: 0, redCard: true }, 0],
   [
     "combo ouro",
     official,
     { homeScore: 2, awayScore: 1, firstScorerId: "player-santiago-gimenez" },
-    36,
+    20,
   ],
   [
     "combo perfeito",
@@ -191,7 +183,7 @@ const scoringCases = [
       redCard: true,
       winner: "home",
     },
-    66,
+    25,
   ],
 ];
 

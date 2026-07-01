@@ -172,58 +172,47 @@ const calculatePoints = (official, prediction) => {
     return "draw";
   };
   const normalize = (value) => {
-    const normalized = String(value ?? "").trim().toLowerCase();
+    const normalized = String(value ?? "")
+      .trim()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
     return normalized || null;
+  };
+  const normalizeId = (value) => String(value ?? "").trim() || null;
+  const marketHit = (officialId, predictionId, officialText, predictionText) => {
+    const nextOfficialId = normalizeId(officialId);
+    const nextPredictionId = normalizeId(predictionId);
+    if (nextOfficialId && nextPredictionId) return nextOfficialId === nextPredictionId;
+    const nextOfficialText = normalize(officialText);
+    const nextPredictionText = normalize(predictionText);
+    return nextOfficialText !== null
+      && nextPredictionText !== null
+      && nextOfficialText === nextPredictionText;
   };
   const exact = official.home === prediction.home && official.away === prediction.away;
   const sameOutcome = outcome(official) === (prediction.winner ?? outcome(prediction));
-  const sameGoalDifference = official.home - official.away === prediction.home - prediction.away;
+  const isNoGoalMatch = official.home === 0 && official.away === 0;
   const firstScorer =
-    (official.firstGoalNoGoals && prediction.firstGoalNoGoals)
-    || (
-      official.firstScorerId
-      && prediction.firstScorerId
-      && official.firstScorerId === prediction.firstScorerId
-    )
-    || (
-      !official.firstScorerId
-      && !prediction.firstScorerId
-      && normalize(official.firstScorer)
-      && normalize(official.firstScorer) === normalize(prediction.firstScorer)
-    );
+    !isNoGoalMatch
+    && marketHit(official.firstScorerId, prediction.firstScorerId, official.firstScorer, prediction.firstScorer);
   const bothTeamsScore =
     prediction.bothTeamsScore !== null
     && prediction.bothTeamsScore !== undefined
     && prediction.bothTeamsScore === (official.home > 0 && official.away > 0);
-  const manOfMatch =
-    (
-      official.manOfMatchId
-      && prediction.manOfMatchId
-      && official.manOfMatchId === prediction.manOfMatchId
-    )
-    || (
-      !official.manOfMatchId
-      && !prediction.manOfMatchId
-      && normalize(official.manOfMatch)
-      && normalize(official.manOfMatch) === normalize(prediction.manOfMatch)
-    );
-  const redCard =
-    prediction.redCard !== null
-    && prediction.redCard !== undefined
-    && official.redCard !== null
-    && official.redCard !== undefined
-    && prediction.redCard === official.redCard;
+  const manOfMatch = marketHit(
+    official.manOfMatchId,
+    prediction.manOfMatchId,
+    official.manOfMatch,
+    prediction.manOfMatch,
+  );
 
   let points = 0;
   if (exact) points += 10;
   if (sameOutcome) points += 5;
-  if (sameGoalDifference) points += 3;
-  if (firstScorer) points += 8;
+  if (firstScorer) points += 5;
   if (bothTeamsScore) points += 2;
-  if (manOfMatch) points += 6;
-  if (redCard) points += 2;
-  if (exact && firstScorer) points += 10;
-  if (exact && sameOutcome && sameGoalDifference && firstScorer && bothTeamsScore && manOfMatch && redCard) points += 20;
+  if (manOfMatch) points += 3;
   return points;
 };
 
@@ -539,11 +528,11 @@ const runScenario = async () => {
   );
   assert(editedPrediction.predicted_winner === "home", "Vencedor do palpite oficial nao persistiu.", editedPrediction);
   assert(editedPrediction.predicted_first_scorer_id === santiagoGimenez.id, "Primeiro marcador por ID nao persistiu.", editedPrediction);
-  assert(editedPrediction.predicted_first_scorer === null, "Nome legado do primeiro marcador foi salvo indevidamente.", editedPrediction);
+  assert(editedPrediction.predicted_first_scorer === santiagoGimenez.name, "Nome do primeiro marcador nao foi preservado.", editedPrediction);
   assert(editedPrediction.predicted_first_goal_no_goals === false, "Flag sem gols divergente.", editedPrediction);
   assert(editedPrediction.predicted_both_teams_score === true, "Ambos marcam nao persistiu.", editedPrediction);
   assert(editedPrediction.predicted_man_of_match_id === edsonAlvarez.id, "Homem do jogo por ID nao persistiu.", editedPrediction);
-  assert(editedPrediction.predicted_man_of_match === null, "Nome legado do homem do jogo foi salvo indevidamente.", editedPrediction);
+  assert(editedPrediction.predicted_man_of_match === edsonAlvarez.name, "Nome do homem do jogo nao foi preservado.", editedPrediction);
   assert(editedPrediction.predicted_red_card === true, "Cartao vermelho nao persistiu.", editedPrediction);
   assert(editAfterCloseRejected, "Edição após fechamento não foi rejeitada.");
   assert(oldGroupInviteRejected, "Token antigo de grupo continuou valido apos regenerar.");

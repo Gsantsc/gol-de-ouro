@@ -70,8 +70,30 @@ const outcome = ({ awayScore, homeScore }) => {
 };
 
 const normalizeMarketText = (value) => {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
   return normalized || null;
+};
+
+const normalizeMarketId = (value) => String(value ?? "").trim() || null;
+
+const marketHit = (officialId, predictionId, officialText, predictionText) => {
+  const normalizedOfficialId = normalizeMarketId(officialId);
+  const normalizedPredictionId = normalizeMarketId(predictionId);
+
+  if (normalizedOfficialId && normalizedPredictionId) {
+    return normalizedOfficialId === normalizedPredictionId;
+  }
+
+  const normalizedOfficialText = normalizeMarketText(officialText);
+  const normalizedPredictionText = normalizeMarketText(predictionText);
+
+  return normalizedOfficialText !== null
+    && normalizedPredictionText !== null
+    && normalizedOfficialText === normalizedPredictionText;
 };
 
 // SCORING ENGINE
@@ -100,55 +122,27 @@ const calculatePredictionPoints = (match, prediction) => {
   };
   const exact = official.homeScore === guessed.homeScore && official.awayScore === guessed.awayScore;
   const sameOutcome = outcome(official) === (guessed.winner ?? outcome(guessed));
-  const sameGoalDifference = official.homeScore - official.awayScore === guessed.homeScore - guessed.awayScore;
+  const isNoGoalMatch = official.homeScore === 0 && official.awayScore === 0;
   const firstScorer =
-    (official.firstGoalNoGoals === true && guessed.firstGoalNoGoals === true)
-    || (
-      official.firstScorerId != null
-      && guessed.firstScorerId != null
-      && official.firstScorerId === guessed.firstScorerId
-    )
-    || (
-      official.firstScorerId == null
-      && guessed.firstScorerId == null
-      && normalizeMarketText(official.firstScorer) !== null
-      && normalizeMarketText(official.firstScorer) === normalizeMarketText(guessed.firstScorer)
-    );
+    !isNoGoalMatch
+    && marketHit(official.firstScorerId, guessed.firstScorerId, official.firstScorer, guessed.firstScorer);
   const bothTeamsScore =
     guessed.bothTeamsScore !== null
     && guessed.bothTeamsScore !== undefined
     && guessed.bothTeamsScore === (official.homeScore > 0 && official.awayScore > 0);
-  const manOfMatch =
-    (
-      official.manOfMatchId != null
-      && guessed.manOfMatchId != null
-      && official.manOfMatchId === guessed.manOfMatchId
-    )
-    || (
-      official.manOfMatchId == null
-      && guessed.manOfMatchId == null
-      && normalizeMarketText(official.manOfMatch) !== null
-      && normalizeMarketText(official.manOfMatch) === normalizeMarketText(guessed.manOfMatch)
-    );
-  const redCard =
-    guessed.redCard !== null
-    && guessed.redCard !== undefined
-    && official.redCard !== null
-    && official.redCard !== undefined
-    && guessed.redCard === official.redCard;
+  const manOfMatch = marketHit(
+    official.manOfMatchId,
+    guessed.manOfMatchId,
+    official.manOfMatch,
+    guessed.manOfMatch,
+  );
 
   let points = 0;
   if (exact) points += 10;
   if (sameOutcome) points += 5;
-  if (sameGoalDifference) points += 3;
-  if (firstScorer) points += 8;
+  if (firstScorer) points += 5;
   if (bothTeamsScore) points += 2;
-  if (manOfMatch) points += 6;
-  if (redCard) points += 2;
-  if (exact && firstScorer) points += 10;
-  if (exact && sameOutcome && sameGoalDifference && firstScorer && bothTeamsScore && manOfMatch && redCard) {
-    points += 20;
-  }
+  if (manOfMatch) points += 3;
 
   return points;
 };

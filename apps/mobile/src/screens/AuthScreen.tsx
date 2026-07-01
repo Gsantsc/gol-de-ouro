@@ -1,16 +1,19 @@
 import { useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { LogIn, UserPlus } from "lucide-react-native";
+import { KeyRound, LogIn, UserPlus } from "lucide-react-native";
 import { readAuthError } from "../shared";
 import { useAuth } from "../hooks/useAuth";
 import { colors, spacing } from "../theme/tokens";
 import { BrandLogo } from "../components/BrandLogo";
 import { AppButton, Card, Eyebrow, Field, Screen, Subtitle, Title, ToastBanner } from "../components/ui";
 
-type Mode = "login" | "signup";
+type Mode = "login" | "signup" | "forgot";
+
+const PASSWORD_RESET_GENERIC_MESSAGE =
+  "Se o e-mail estiver cadastrado, enviaremos um link para redefinir sua senha.";
 
 export const AuthScreen = () => {
-  const { signIn, signUp } = useAuth();
+  const { requestPasswordReset, signIn, signUp } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -37,12 +40,21 @@ export const AuthScreen = () => {
         await signIn(email, password);
         setFeedback("Login efetuado com sucesso.\nRedirecionando...");
         setFeedbackTone("success");
-      } else {
+      } else if (mode === "signup") {
         await signUp(name, email, password);
         setFeedback("Cadastro realizado com sucesso.\nAgora aguarde a aprovação do administrador.");
         setFeedbackTone("success");
+      } else {
+        await requestPasswordReset(email);
+        setFeedback(PASSWORD_RESET_GENERIC_MESSAGE);
+        setFeedbackTone("success");
       }
     } catch (error) {
+      if (mode === "forgot") {
+        setFeedback(PASSWORD_RESET_GENERIC_MESSAGE);
+        setFeedbackTone("success");
+        return;
+      }
       const message = readAuthError(error);
       setFeedback(message);
       setFeedbackTone("error");
@@ -94,19 +106,35 @@ export const AuthScreen = () => {
             placeholder="voce@email.com"
             value={email}
           />
-          <Field
-            label="Senha"
-            onChangeText={setPassword}
-            placeholder="******"
-            secureTextEntry
-            value={password}
-          />
+          {mode !== "forgot" ? (
+            <Field
+              label="Senha"
+              onChangeText={setPassword}
+              placeholder="******"
+              secureTextEntry
+              value={password}
+            />
+          ) : (
+            <Text style={styles.note}>
+              Informe seu email para receber o link de recuperação de senha.
+            </Text>
+          )}
+
+          {mode === "login" && (
+            <AppButton
+              disabled={loading}
+              icon={<KeyRound color={colors.text} size={18} />}
+              onPress={() => changeMode("forgot")}
+              title="Esqueci minha senha"
+              variant="ghost"
+            />
+          )}
 
           <AppButton
-            disabled={!email || !password || (mode === "signup" && !name)}
+            disabled={!email || (mode !== "forgot" && !password) || (mode === "signup" && !name)}
             loading={loading}
             onPress={submit}
-            title={mode === "login" ? "Acessar" : "Criar conta"}
+            title={mode === "forgot" ? "Enviar link de recuperação" : mode === "login" ? "Acessar" : "Criar conta"}
           />
         </View>
 

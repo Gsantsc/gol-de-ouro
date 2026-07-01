@@ -41,6 +41,8 @@ import {
   loadUserDashboardData,
   deactivateUserGroupInvite,
   regenerateUserGroupInvite,
+  requestPasswordReset,
+  PASSWORD_RESET_GENERIC_MESSAGE,
   revokeUserAppInvite,
   signInUser,
   signOutUser,
@@ -536,7 +538,7 @@ const AuthPanel = ({
   onError: (message: string | null) => void;
   onSuccess: () => Promise<void>;
 }) => {
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -553,6 +555,12 @@ const AuthPanel = ({
       setLoading(true);
       setNotice(null);
       onError(null);
+      if (mode === "forgot") {
+        await requestPasswordReset(email);
+        setNotice(PASSWORD_RESET_GENERIC_MESSAGE);
+        return;
+      }
+
       if (mode === "login") {
         await signInUser(email, password);
       } else {
@@ -563,14 +571,18 @@ const AuthPanel = ({
       }
       await onSuccess();
     } catch (nextError) {
-      onError(readAuthError(nextError));
+      if (mode === "forgot") {
+        setNotice(PASSWORD_RESET_GENERIC_MESSAGE);
+      } else {
+        onError(readAuthError(nextError));
+      }
     } finally {
       submittingRef.current = false;
       setLoading(false);
     }
   };
 
-  const changeMode = (nextMode: "login" | "signup") => {
+  const changeMode = (nextMode: "login" | "signup" | "forgot") => {
     if (loading) return;
     setMode(nextMode);
     setNotice(null);
@@ -612,15 +624,36 @@ const AuthPanel = ({
       )}
       <label className="mt-6 block text-sm font-bold text-white/70">Email</label>
       <input className="input mt-2 w-full" onChange={(event) => setEmail(event.target.value)} type="email" value={email} />
-      <label className="mt-4 block text-sm font-bold text-white/70">Senha</label>
-      <input
-        className="input mt-2 w-full"
-        onChange={(event) => setPassword(event.target.value)}
-        type="password"
-        value={password}
-      />
-      <button className="btn-primary mt-6 w-full" disabled={loading || !email || !password || (mode === "signup" && !name)}>
-        {loading ? "Aguarde..." : mode === "login" ? "Entrar" : "Criar conta"}
+      {mode !== "forgot" ? (
+        <>
+          <label className="mt-4 block text-sm font-bold text-white/70">Senha</label>
+          <input
+            className="input mt-2 w-full"
+            onChange={(event) => setPassword(event.target.value)}
+            type="password"
+            value={password}
+          />
+        </>
+      ) : (
+        <p className="mt-4 text-sm leading-6 text-white/60">
+          Informe seu email para receber o link de recuperacao de senha.
+        </p>
+      )}
+      {mode === "login" && (
+        <button
+          className="mt-3 text-sm font-bold text-gold hover:text-gold-300"
+          disabled={loading}
+          onClick={() => changeMode("forgot")}
+          type="button"
+        >
+          Esqueci minha senha
+        </button>
+      )}
+      <button
+        className="btn-primary mt-6 w-full"
+        disabled={loading || !email || (mode !== "forgot" && !password) || (mode === "signup" && !name)}
+      >
+        {loading ? "Aguarde..." : mode === "forgot" ? "Enviar link de recuperação" : mode === "login" ? "Entrar" : "Criar conta"}
       </button>
       {notice && <p className="mt-4 text-sm font-bold text-gold">{notice}</p>}
     </form>

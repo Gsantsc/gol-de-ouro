@@ -122,6 +122,11 @@ const getAppBaseUrl = () => {
   return process.env.NEXT_PUBLIC_APP_URL ?? "https://gol-de-ouro-app.vercel.app";
 };
 
+export const PASSWORD_RESET_GENERIC_MESSAGE =
+  "Se o e-mail estiver cadastrado, enviaremos um link para redefinir sua senha.";
+export const PASSWORD_RESET_INVALID_LINK_MESSAGE =
+  "Link inválido ou expirado. Solicite um novo link de recuperação.";
+
 const normalizeProfile = (profile: Profile | null): Profile | null => {
   if (!profile) return null;
   return {
@@ -187,6 +192,33 @@ export const signUpUser = async ({
 };
 
 export const signOutUser = () => supabase.auth.signOut({ scope: "global" });
+
+export const requestPasswordReset = async (email: string) => {
+  const normalizedEmail = normalizeEmail(email);
+  const redirectTo = `${getAppBaseUrl().replace(/\/+$/, "")}/reset-password`;
+
+  try {
+    const { error } = await withSupabaseTimeout(
+      supabase.auth.resetPasswordForEmail(normalizedEmail, { redirectTo }),
+      "Tempo esgotado ao enviar recuperacao."
+    );
+    if (error) debugLog("[USER AUTH] PASSWORD_RESET_REQUEST_FAILED", error.message);
+  } catch (error) {
+    debugLog(
+      "[USER AUTH] PASSWORD_RESET_REQUEST_FAILED",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+};
+
+export const updateUserPassword = async (password: string) => {
+  const { error } = await withSupabaseTimeout(
+    supabase.auth.updateUser({ password }),
+    "Tempo esgotado ao redefinir senha."
+  );
+
+  if (error) throw error;
+};
 
 export const ensureCurrentUserProfile = async (displayName?: string) => {
   const { data, error } = await withSupabaseTimeout(

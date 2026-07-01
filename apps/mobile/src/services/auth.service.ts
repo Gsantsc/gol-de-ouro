@@ -8,6 +8,8 @@ const debugLog = (...args: unknown[]) => {
   if (__DEV__) console.debug(...args);
 };
 let signInWithPasswordCalls = 0;
+const PASSWORD_RESET_REDIRECT_URL =
+  process.env.EXPO_PUBLIC_PASSWORD_RESET_URL ?? "https://gol-de-ouro-app.vercel.app/reset-password";
 
 const normalizeProfile = (profile: Profile | null): Profile | null => {
   if (!profile) return null;
@@ -96,6 +98,22 @@ export const signUp = async (name: string, email: string, password: string): Pro
 };
 
 export const signOut = () => supabase.auth.signOut({ scope: "global" });
+
+export const requestPasswordReset = async (email: string) => {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: PASSWORD_RESET_REDIRECT_URL
+    });
+    if (error) debugLog("[MOBILE AUTH] PASSWORD_RESET_REQUEST_FAILED", error.message);
+  } catch (error) {
+    debugLog(
+      "[MOBILE AUTH] PASSWORD_RESET_REQUEST_FAILED",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+};
 
 export const getProfile = async (userId: string): Promise<Profile | null> => {
   const { data, error } = await supabase

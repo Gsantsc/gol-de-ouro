@@ -9,6 +9,7 @@ type AuthContextValue = {
   loading: boolean;
   profile: Profile | null;
   session: Session | null;
+  requestPasswordReset: (email: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -153,6 +154,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       refreshingProfile,
       session,
       refreshProfile,
+      requestPasswordReset: authService.requestPasswordReset,
       signIn: async (email, password) => {
         countDebug("signIn", email.trim().toLowerCase());
         const nextSession = await authService.signIn(email, password);
